@@ -404,7 +404,9 @@ class JavaFunctionOptimizer(FunctionOptimizer):
             line_profiler_output_path = get_run_tmp_file(Path("line_profiler_output.json"))
 
             success = self.language_support.instrument_source_for_line_profiler(
-                func_info=self.function_to_optimize, line_profiler_output_file=line_profiler_output_path
+                func_info=self.function_to_optimize,
+                line_profiler_output_file=line_profiler_output_path,
+                project_classpath=self._get_project_classpath(),
             )
             if not success:
                 return {"timings": {}, "unit": 0, "str_out": ""}

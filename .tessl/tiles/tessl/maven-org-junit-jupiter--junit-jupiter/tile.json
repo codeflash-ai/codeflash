@@ -1,0 +1,7 @@
+{
+  "name": "tessl/maven-org-junit-jupiter--junit-jupiter",
+  "version": "5.12.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:maven/org.junit.jupiter/junit-jupiter@5.12.2",
+  "summary": "JUnit Jupiter aggregator module providing a unified API for JUnit 5 testing framework with core API, parameterized tests, and test engine."
+}

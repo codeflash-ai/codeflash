@@ -8,6 +8,8 @@
  * - capturePerf: Capture performance metrics (timing only)
  * - serialize/deserialize: Value serialization for storage
  * - comparator: Deep equality comparison
+ * - tracer: Function tracing for replay test generation
+ * - replay: Replay test utilities
  *
  * Usage (CommonJS):
  *   const { capture, capturePerf } = require('codeflash');
@@ -29,6 +31,22 @@ const comparator = require('./comparator');
 
 // Result comparison (used by CLI)
 const compareResults = require('./compare-results');
+
+// Function tracing (for replay test generation)
+let tracer = null;
+try {
+    tracer = require('./tracer');
+} catch (e) {
+    // Tracer may not be available if better-sqlite3 is not installed
+}
+
+// Replay test utilities
+let replay = null;
+try {
+    replay = require('./replay');
+} catch (e) {
+    // Replay may not be available
+}
 
 // Re-export all public APIs
 module.exports = {
@@ -88,4 +106,24 @@ module.exports = {
     // === Feature Detection ===
     hasV8: serializer.hasV8,
     hasMsgpack: serializer.hasMsgpack,
+
+    // === Function Tracing (for replay test generation) ===
+    tracer: tracer ? {
+        init: tracer.init,
+        wrap: tracer.wrap,
+        createWrapper: tracer.createWrapper,
+        disable: tracer.disable,
+        enable: tracer.enable,
+        getStats: tracer.getStats,
+    } : null,
+
+    // === Replay Test Utilities ===
+    replay: replay ? {
+        getNextArg: replay.getNextArg,
+        getTracesWithMetadata: replay.getTracesWithMetadata,
+        getTracedFunctions: replay.getTracedFunctions,
+        getTraceMetadata: replay.getTraceMetadata,
+        generateReplayTest: replay.generateReplayTest,
+        createReplayTestFromTrace: replay.createReplayTestFromTrace,
+    } : null,
 };

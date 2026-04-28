@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-coverage",
+  "version": "7.10.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/coverage@7.10.6",
+  "summary": "Code coverage measurement and reporting for Python with support for branch coverage, multiple output formats, and plugin architecture"
+}

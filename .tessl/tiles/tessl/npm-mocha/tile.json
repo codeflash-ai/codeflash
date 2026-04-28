@@ -1,0 +1,7 @@
+{
+  "name": "tessl/npm-mocha",
+  "version": "11.7.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/mocha@11.7.2",
+  "summary": "Simple, flexible, fun JavaScript testing framework for Node.js and browsers"
+}

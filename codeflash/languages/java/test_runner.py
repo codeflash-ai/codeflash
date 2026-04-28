@@ -24,6 +24,12 @@ from typing import Any
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.languages.base import TestResult
 
+_INCLUDE_PATTERN = re.compile(r"""(?:^|(?<=\s))include\s*\(?[^)]*\)?""", re.MULTILINE | re.DOTALL)
+
+_LISTOF_PATTERN = re.compile(r"""listOf\s*\(([^)]*)\)""", re.DOTALL)
+
+_QUOTED_PATTERN = re.compile(r"""['"]([^'"]+)['"]""")
+
 _result_counter = itertools.count(1)
 
 
@@ -205,12 +211,28 @@ def _extract_modules_from_settings_gradle(content: str) -> list[str]:
     Looks for include directives like:
         include("module-a", "module-b")   // Kotlin DSL
         include 'module-a', 'module-b'    // Groovy DSL
+    Also handles dynamic Kotlin DSL patterns like:
+        val allProjects = listOf("module-a", "module-b")
+        include(*(allProjects + ...).toTypedArray())
     Module names may be prefixed with ':' which is stripped.
     """
     modules: list[str] = []
-    for match in re.findall(r"""include\s*\(?[^)\n]*\)?""", content):
-        for name in re.findall(r"""['"]([^'"]+)['"]""", match):
+    # Standard include(...) directives — word boundary avoids matching variable names
+    # like 'includedProjects'. Pattern allows multi-line includes (e.g., eureka's
+    # include 'module-a',\n        'module-b',\n        'module-c')
+    for match in _INCLUDE_PATTERN.findall(content):
+        for name in _QUOTED_PATTERN.findall(match):
             modules.append(name.lstrip(":"))
+    # Kotlin DSL: val ... = listOf("module-a", "module-b", ...) spanning multiple lines.
+    # Used when settings.gradle.kts builds the include list dynamically.
+    if not modules or not any("/" not in m and "." not in m for m in modules):
+        seen = set(modules)
+        for match in _LISTOF_PATTERN.findall(content):
+            for name in _QUOTED_PATTERN.findall(match):
+                stripped = name.lstrip(":")
+                if stripped not in seen:
+                    modules.append(stripped)
+                    seen.add(stripped)
     return modules
 
 
@@ -269,6 +291,50 @@ def _match_module_from_rel_path(rel_path: Path, modules: list[str]) -> str | Non
     return None
 
 
+def _read_config_module_root(project_root: Path) -> str | None:
+    """Read module-root from codeflash.toml or pyproject.toml."""
+    for cfg_name in ("codeflash.toml", "pyproject.toml"):
+        cfg_path = project_root / cfg_name
+        if cfg_path.exists():
+            try:
+                cfg_text = cfg_path.read_text(encoding="utf-8")
+                m = re.search(r'module-root\s*=\s*["\']([^"\']+)["\']', cfg_text)
+                if m:
+                    return m.group(1).strip().strip("/")
+            except Exception:
+                pass
+    return None
+
+
+def _infer_module_from_config(project_root: Path) -> str | None:
+    """Infer the target Gradle module from codeflash config in gradle.properties.
+
+    Reads codeflash.moduleRoot or codeflash.testsRoot and extracts the first
+    path component as the module name. Verifies the module directory has a
+    build.gradle(.kts) file.
+    """
+    props_file = project_root / "gradle.properties"
+    if not props_file.exists():
+        return None
+    try:
+        content = props_file.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+    for key in ("codeflash.moduleRoot", "codeflash.testsRoot"):
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith(key + "="):
+                value = line.split("=", 1)[1].strip()
+                # Extract first path component (e.g. "rewrite-core/src/main/java" → "rewrite-core")
+                candidate = Path(value).parts[0] if Path(value).parts else None
+                if candidate:
+                    module_dir = project_root / candidate
+                    if (module_dir / "build.gradle.kts").exists() or (module_dir / "build.gradle").exists():
+                        return candidate
+    return None
+
+
 def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, str | None]:
     """Find the multi-module parent root if tests are in a different module.
 
@@ -287,10 +353,18 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
                 test_file_paths.append(test_file.benchmarking_file_path)
             elif hasattr(test_file, "instrumented_behavior_file_path") and test_file.instrumented_behavior_file_path:
                 test_file_paths.append(test_file.instrumented_behavior_file_path)
+            elif hasattr(test_file, "original_file_path") and test_file.original_file_path:
+                test_file_paths.append(test_file.original_file_path)
     elif isinstance(test_paths, (list, tuple)):
         test_file_paths = [Path(p) if isinstance(p, str) else p for p in test_paths]
 
     if not test_file_paths:
+        # No test file paths available — try to infer the module from codeflash config
+        # in gradle.properties (e.g. codeflash.moduleRoot=rewrite-core/src/main/java).
+        module = _infer_module_from_config(project_root)
+        if module:
+            logger.info("Inferred module '%s' from codeflash config (no test file paths)", module)
+            return project_root, module
         return project_root, None
 
     test_outside_project = False
@@ -320,7 +394,14 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
                     module_counts[matched] = module_counts.get(matched, 0) + 1
 
             if module_counts:
-                best_module = max(module_counts, key=lambda m: module_counts[m])
+                # On ties, prefer the module matching codeflash.toml module-root
+                config_module = _read_config_module_root(project_root)
+                max_count = max(module_counts.values())
+                tied = [m for m, c in module_counts.items() if c == max_count]
+                if config_module and config_module in tied:
+                    best_module = config_module
+                else:
+                    best_module = max(module_counts, key=lambda m: module_counts[m])
                 logger.debug(
                     "Detected multi-module project. Root: %s, Module votes: %s, Selected: %s",
                     project_root,
@@ -328,6 +409,31 @@ def _find_multi_module_root(project_root: Path, test_paths: Any) -> tuple[Path, 
                     best_module,
                 )
                 return project_root, best_module
+
+        # project_root has no sub-modules — check if it is itself a sub-module
+        # of a parent multi-module project (e.g. rewrite-core/ inside rewrite/).
+        parent = project_root.parent
+        while parent != parent.parent:
+            if _is_build_root(parent):
+                parent_modules = _detect_modules(parent)
+                if parent_modules:
+                    try:
+                        rel_path = project_root.relative_to(parent)
+                        matched = _match_module_from_rel_path(rel_path, parent_modules)
+                        if matched:
+                            logger.debug("Detected project_root as sub-module. Root: %s, Module: %s", parent, matched)
+                            return parent, matched
+                    except ValueError:
+                        pass
+            parent = parent.parent
+
+        # Last resort: settings.gradle may use dynamic includes that _detect_modules
+        # can't parse. Fall back to codeflash config in gradle.properties.
+        module = _infer_module_from_config(project_root)
+        if module:
+            logger.info("Inferred module '%s' from codeflash config (dynamic settings.gradle)", module)
+            return project_root, module
+
         return project_root, None
 
     current = project_root.parent
@@ -420,7 +526,7 @@ def run_behavioral_tests(
     if enable_coverage:
         coverage_xml_path = strategy.setup_coverage(build_root, test_module, project_root)
 
-    min_timeout = 300 if enable_coverage else 60
+    min_timeout = 1200 if enable_coverage else 60
     effective_timeout = max(timeout or 300, min_timeout)
 
     if enable_coverage:

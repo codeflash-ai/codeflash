@@ -13,6 +13,13 @@ from pathlib import Path
 
 import pytest
 
+from codeflash.languages.java.comparator import _find_comparator_jar
+
+requires_java_runtime = pytest.mark.skipif(
+    _find_comparator_jar() is None,
+    reason="codeflash-runtime JAR not found - skipping Java integration tests",
+)
+
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
@@ -227,6 +234,7 @@ public class PreciseWaiter {
 """
 
 
+@requires_java_runtime
 class TestJavaRunAndParseBehavior:
     def test_behavior_single_test_method(self, java_project):
         """Full pipeline: instrument → run → parse with precise field assertions."""
@@ -405,6 +413,7 @@ public class AdderMultiTest {
         assert equivalent is False
 
 
+@requires_java_runtime
 class TestJavaRunAndParsePerformance:
     """Tests that the performance instrumentation produces correct timing data.
 

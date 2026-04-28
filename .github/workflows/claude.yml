@@ -27,17 +27,21 @@ on:
 jobs:
   # Automatic PR review (can fix linting issues and push)
   # Blocked for fork PRs to prevent malicious code execution
+  # TEMPORARILY DISABLED — re-enable by removing `false &&` below
   pr-review:
     concurrency:
       group: pr-review-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     if: |
+      false &&
       (
-        github.event_name == 'pull_request' &&
-        github.event.sender.login != 'claude[bot]' &&
-        github.event.pull_request.head.repo.full_name == github.repository
-      ) ||
-      github.event_name == 'workflow_dispatch'
+        (
+          github.event_name == 'pull_request' &&
+          github.event.sender.login != 'claude[bot]' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        ) ||
+        github.event_name == 'workflow_dispatch'
+      )
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -47,13 +51,15 @@ jobs:
       actions: read
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref || github.ref }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
 
       - name: Install dependencies
         run: |
@@ -61,7 +67,7 @@ jobs:
           uv sync
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}
@@ -307,13 +313,15 @@ jobs:
           fi
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ steps.pr-ref.outputs.ref }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
 
       - name: Install dependencies
         run: |
@@ -321,7 +329,7 @@ jobs:
           uv sync
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ secrets.AWS_REGION }}

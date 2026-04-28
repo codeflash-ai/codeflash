@@ -1,0 +1,18 @@
+name: Tessl Tile Updates
+
+on:
+  schedule:
+    - cron: "0 9 * * 1" # Weekly on Monday at 9am UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  tessl:
+    uses: codeflash-ai/github-workflows/.github/workflows/tessl-update.yml@main
+    secrets:
+      TESSL_TOKEN: ${{ secrets.TESSL_TOKEN }}
+      CI_BOT_APP_ID: ${{ secrets.CI_BOT_APP_ID }}
+      CI_BOT_PRIVATE_KEY: ${{ secrets.CI_BOT_PRIVATE_KEY }}

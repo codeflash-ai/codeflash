@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-pytest-cov",
+  "version": "6.2.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/pytest-cov@6.2.1",
+  "summary": "Pytest plugin for measuring coverage with subprocess and distributed testing support."
+}

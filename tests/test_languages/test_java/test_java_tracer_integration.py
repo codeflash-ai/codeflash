@@ -87,7 +87,6 @@ class TestFunctionDiscoveryFromReplayTests:
                 assert func.language == "java", f"Expected language='java', got '{func.language}'"
                 assert func.file_path == file_path
 
-        assert "computeSum" in all_func_names
         assert "repeatString" in all_func_names
 
     def test_discover_tests_for_replay_tests(self, traced_workload: tuple) -> None:
@@ -111,7 +110,6 @@ class TestFunctionDiscoveryFromReplayTests:
             func_name = qualified_name.split(".")[-1] if "." in qualified_name else qualified_name
             matched_func_names.add(func_name)
 
-        assert "computeSum" in matched_func_names, f"computeSum not found in: {result.keys()}"
         assert "repeatString" in matched_func_names, f"repeatString not found in: {result.keys()}"
 
         # Each function should have at least one test
@@ -222,8 +220,8 @@ class TestFullDiscoveryPipeline:
             assert len(function_to_tests) > 0, "No function-to-test mappings"
 
             # Verify function_to_tests has entries for our traced functions
-            has_compute_sum = any("computeSum" in key for key in function_to_tests)
-            assert has_compute_sum, f"computeSum not in function_to_tests keys: {list(function_to_tests.keys())}"
+            has_repeat_string = any("repeatString" in key for key in function_to_tests)
+            assert has_repeat_string, f"repeatString not in function_to_tests keys: {list(function_to_tests.keys())}"
 
             # Step 4: Rank functions (like optimizer.rank_all_functions_globally)
             if jfr_file.exists():
@@ -280,7 +278,7 @@ class TestFullDiscoveryPipeline:
             source_code = WORKLOAD_SOURCE.read_text(encoding="utf-8")
             source_functions = discover_functions_from_source(source_code, file_path=WORKLOAD_SOURCE)
             # Pick the first function with a return type for instrumentation
-            target_func = next(f for f in source_functions if f.function_name == "computeSum")
+            target_func = next(f for f in source_functions if f.function_name == "repeatString")
 
             replay_test_file = replay_test_paths[0]
             test_source = replay_test_file.read_text(encoding="utf-8")

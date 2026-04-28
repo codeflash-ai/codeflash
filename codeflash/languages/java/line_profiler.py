@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -130,9 +131,9 @@ class JavaLineProfiler:
         config_output_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
         return config_output_path
 
-    def build_javaagent_arg(self, config_path: Path) -> str:
+    def build_javaagent_arg(self, config_path: Path, classpath: str | None = None) -> str:
         """Return the -javaagent JVM argument string."""
-        agent_jar = find_agent_jar()
+        agent_jar = find_agent_jar(classpath=classpath)
         if agent_jar is None:
             msg = f"{AGENT_JAR_NAME} not found in resources or dev build directory"
             raise FileNotFoundError(msg)
@@ -565,12 +566,20 @@ def find_method_for_line(
     return Path(file_path).name, line_num
 
 
-def find_agent_jar() -> Path | None:
+def find_agent_jar(classpath: str | None = None) -> Path | None:
     """Locate the profiler agent JAR file (now bundled in codeflash-runtime).
 
-    Checks local Maven repo, package resources, and development build directory.
+    Checks the resolved classpath (if provided), local Maven repo, package resources,
+    and development build directory.
     """
-    # Check local Maven repository first (fastest)
+    # Check resolved classpath first (Gradle projects resolve here, not ~/.m2)
+    if classpath:
+        for entry in classpath.split(os.pathsep):
+            jar_path = Path(entry)
+            if "codeflash-runtime" in jar_path.name and jar_path.suffix == ".jar" and jar_path.exists():
+                return jar_path
+
+    # Check local Maven repository (Maven projects resolve here)
     m2_jar = (
         Path.home()
         / ".m2"

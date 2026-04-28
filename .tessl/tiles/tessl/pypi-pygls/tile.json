@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-pygls",
+  "version": "1.3.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/pygls@1.3.1",
+  "summary": "A pythonic generic language server framework implementing the Language Server Protocol for building custom language servers"
+}

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import libcst as cst
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import (
     CodeContext,

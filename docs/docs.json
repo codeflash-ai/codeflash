@@ -31,6 +31,14 @@
             ]
           },
           {
+            "group": "Claude Code Plugin",
+            "pages": [
+              "claude-code-plugin/getting-started",
+              "claude-code-plugin/usage-guide",
+              "claude-code-plugin/troubleshooting"
+            ]
+          },
+          {
             "group": "Using Codeflash",
             "pages": [
               "optimizing-with-codeflash/one-function",
@@ -67,18 +75,14 @@
               "editor-plugins/vscode/configuration",
               "editor-plugins/vscode/troubleshooting"
             ]
-          },
-          {
-            "group": "Claude Code Plugin",
-            "pages": [
-              "claude-code-plugin/getting-started",
-              "claude-code-plugin/usage-guide",
-              "claude-code-plugin/troubleshooting"
-            ]
           }
         ]
       }
     ]
+  },
+  "banner": {
+    "content": "New: Use Codeflash directly inside Claude Code with the [Codeflash Claude Code Plugin](/claude-code-plugin/getting-started).",
+    "dismissible": true
   },
   "logo": {
     "light": "/images/codeflash_light.svg",

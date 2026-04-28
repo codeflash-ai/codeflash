@@ -31,7 +31,7 @@ public final class TraceRecorder {
 
     private TraceRecorder(TracerConfig config) {
         this.config = config;
-        this.writer = new TraceWriter(config.getDbPath());
+        this.writer = new TraceWriter(config.getDbPath(), config.isInMemoryDb());
         this.maxFunctionCount = config.getMaxFunctionCount();
         this.serializerExecutor = Executors.newCachedThreadPool(r -> {
             Thread t = new Thread(r, "codeflash-serializer");
@@ -76,23 +76,27 @@ public final class TraceRecorder {
             return;
         }
 
-        // Serialize args with timeout to prevent deep object graph traversal from blocking
+        // Serialize args — try inline fast path first, fall back to async with timeout
         byte[] argsBlob;
-        Future<byte[]> future = serializerExecutor.submit(() -> Serializer.serialize(args));
-        try {
-            argsBlob = future.get(SERIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            droppedCaptures.incrementAndGet();
-            System.err.println("[codeflash-tracer] Serialization timed out for " + className + "."
-                    + methodName);
-            return;
-        } catch (Exception e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            droppedCaptures.incrementAndGet();
-            System.err.println("[codeflash-tracer] Serialization failed for " + className + "."
-                    + methodName + ": " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
-            return;
+        argsBlob = Serializer.serializeFast(args);
+        if (argsBlob == null) {
+            // Slow path: async serialization with timeout for complex/unknown types
+            Future<byte[]> future = serializerExecutor.submit(() -> Serializer.serialize(args));
+            try {
+                argsBlob = future.get(SERIALIZATION_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                future.cancel(true);
+                droppedCaptures.incrementAndGet();
+                System.err.println("[codeflash-tracer] Serialization timed out for " + className + "."
+                        + methodName);
+                return;
+            } catch (Exception e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                droppedCaptures.incrementAndGet();
+                System.err.println("[codeflash-tracer] Serialization failed for " + className + "."
+                        + methodName + ": " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                return;
+            }
         }
 
         long timeNs = System.nanoTime();
