@@ -220,14 +220,20 @@ class JavaImportResolver:
             return last_part
         return None
 
-    def expand_wildcard_import(self, import_path: str) -> list[ResolvedImport]:
+    def expand_wildcard_import(
+        self, import_path: str, max_types: int = 0, filter_names: set[str] | None = None
+    ) -> list[ResolvedImport]:
         """Expand a wildcard import (e.g., com.example.utils.*) to individual class imports.
 
         Resolves the package path to a directory and returns a ResolvedImport for each
         .java file found in that directory.
+
+        Args:
+            import_path: The package path (without the trailing .*).
+            max_types: Maximum number of types to return. 0 means no limit.
+            filter_names: If provided, only include types whose class name is in this set.
+
         """
-        # Convert package path to directory path
-        # e.g., "com.example.utils" -> "com/example/utils"
         relative_dir = import_path.replace(".", "/")
 
         resolved: list[ResolvedImport] = []
@@ -237,17 +243,21 @@ class JavaImportResolver:
             if candidate_dir.is_dir():
                 for java_file in candidate_dir.glob("*.java"):
                     class_name = java_file.stem
-                    # Only include files that look like class names (start with uppercase)
-                    if class_name and class_name[0].isupper():
-                        resolved.append(
-                            ResolvedImport(
-                                import_path=f"{import_path}.{class_name}",
-                                file_path=java_file,
-                                is_external=False,
-                                is_wildcard=False,
-                                class_name=class_name,
-                            )
+                    if not class_name or not class_name[0].isupper():
+                        continue
+                    if filter_names is not None and class_name not in filter_names:
+                        continue
+                    resolved.append(
+                        ResolvedImport(
+                            import_path=f"{import_path}.{class_name}",
+                            file_path=java_file,
+                            is_external=False,
+                            is_wildcard=False,
+                            class_name=class_name,
                         )
+                    )
+                    if max_types and len(resolved) >= max_types:
+                        return resolved
 
         return resolved
 
