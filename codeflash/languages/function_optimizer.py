@@ -78,6 +78,7 @@ from codeflash.models.models import (
     AdaptiveOptimizedCandidate,
     AIServiceAdaptiveOptimizeRequest,
     AIServiceCodeRepairRequest,
+    AIServiceRefinerRequest,
     BestOptimization,
     CandidateEvaluationContext,
     GeneratedTests,
@@ -1277,30 +1278,28 @@ class FunctionOptimizer:
                     self.future_adaptive_optimizations.append(future_adaptive_optimization)
             else:
                 # Refinement for all languages (Python, JavaScript, TypeScript)
-                # future_refinement = self.executor.submit(
-                #     aiservice_client.optimize_code_refinement,
-                #     request=[
-                #         AIServiceRefinerRequest(
-                #             optimization_id=best_optimization.candidate.optimization_id,
-                #             original_source_code=code_context.read_writable_code.markdown,
-                #             read_only_dependency_code=code_context.read_only_context_code,
-                #             original_code_runtime=original_code_baseline.runtime,
-                #             optimized_source_code=best_optimization.candidate.source_code.markdown,
-                #             optimized_explanation=best_optimization.candidate.explanation,
-                #             optimized_code_runtime=best_optimization.runtime,
-                #             speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
-                #             trace_id=self.get_trace_id(exp_type),
-                #             original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-                #             optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
-                #             function_references=function_references,
-                #             language=self.function_to_optimize.language,
-                #             language_version=self.language_support.language_version,
-                #         )
-                #     ],
-                #     rerun_trace_id=self.rerun_trace_id,
-                # )
-                future_refinement = concurrent.futures.Future()
-                future_refinement.set_result([])
+                future_refinement = self.executor.submit(
+                    aiservice_client.optimize_code_refinement,
+                    request=[
+                        AIServiceRefinerRequest(
+                            optimization_id=best_optimization.candidate.optimization_id,
+                            original_source_code=code_context.read_writable_code.markdown,
+                            read_only_dependency_code=code_context.read_only_context_code,
+                            original_code_runtime=original_code_baseline.runtime,
+                            optimized_source_code=best_optimization.candidate.source_code.markdown,
+                            optimized_explanation=best_optimization.candidate.explanation,
+                            optimized_code_runtime=best_optimization.runtime,
+                            speedup=f"{int(performance_gain(original_runtime_ns=original_code_baseline.runtime, optimized_runtime_ns=best_optimization.runtime) * 100)}%",
+                            trace_id=self.get_trace_id(exp_type),
+                            original_line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+                            optimized_line_profiler_results=best_optimization.line_profiler_test_results["str_out"],
+                            function_references=function_references,
+                            language=self.function_to_optimize.language,
+                            language_version=self.language_support.language_version,
+                        )
+                    ],
+                    rerun_trace_id=self.rerun_trace_id,
+                )
                 self.future_all_refinements.append(future_refinement)
 
         # Display runtime information
@@ -1347,26 +1346,23 @@ class FunctionOptimizer:
         ai_service_client = self.aiservice_client if exp_type == "EXP0" else self.local_aiservice_client
         assert ai_service_client is not None, "AI service client must be set for optimization"
 
-        # future_line_profile_results = self.executor.submit(
-        #     ai_service_client.optimize_python_code_line_profiler,
-        #     source_code=code_context.read_writable_code.markdown,
-        #     dependency_code=code_context.read_only_context_code,
-        #     trace_id=self.get_trace_id(exp_type),
-        #     line_profiler_results=original_code_baseline.line_profile_results["str_out"],
-        #     n_candidates=get_effort_value(EffortKeys.N_OPTIMIZER_LP_CANDIDATES, self.effort),
-        #     experiment_metadata=ExperimentMetadata(
-        #         id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
-        #     )
-        #     if self.experiment_id
-        #     else None,
-        #     is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
-        #     language=self.function_to_optimize.language,
-        #     language_version=self.language_support.language_version,
-        #     rerun_trace_id=self.rerun_trace_id,
-        # )
-
-        future_line_profile_results = concurrent.futures.Future()
-        future_line_profile_results.set_result([])
+        future_line_profile_results = self.executor.submit(
+            ai_service_client.optimize_python_code_line_profiler,
+            source_code=code_context.read_writable_code.markdown,
+            dependency_code=code_context.read_only_context_code,
+            trace_id=self.get_trace_id(exp_type),
+            line_profiler_results=original_code_baseline.line_profile_results["str_out"],
+            n_candidates=get_effort_value(EffortKeys.N_OPTIMIZER_LP_CANDIDATES, self.effort),
+            experiment_metadata=ExperimentMetadata(
+                id=self.experiment_id, group="control" if exp_type == "EXP0" else "experiment"
+            )
+            if self.experiment_id
+            else None,
+            is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
+            language=self.function_to_optimize.language,
+            language_version=self.language_support.language_version,
+            rerun_trace_id=self.rerun_trace_id,
+        )
 
         normalized_original = self.language_support.normalize_code(code_context.read_writable_code.flat.strip())
         processor = CandidateProcessor(

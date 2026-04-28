@@ -883,8 +883,6 @@ def filter_functions(
             site_packages_removed_count += len(_functions)
             continue
         if not file_path_normalized.startswith(module_root_str + os.sep):
-            print(f"module_root_str: {module_root_str}")
-            print(f"file_path_normalized: {file_path_normalized}")
             non_modules_removed_count += len(_functions)
             continue
 
