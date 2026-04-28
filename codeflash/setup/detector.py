@@ -848,10 +848,14 @@ def _detect_go_formatter(project_root: Path) -> tuple[list[str], str]:
     Go has a universal formatter (gofmt). goimports is preferred if available
     because it also manages imports.
     """
-    if shutil.which("goimports"):
-        return ["goimports -w $file"], "goimports (auto-detected)"
-    if shutil.which("gofmt"):
-        return ["gofmt -w $file"], "gofmt (auto-detected)"
+    from codeflash.languages.golang.formatter import _find_go_tool
+
+    goimports = _find_go_tool("goimports")
+    if goimports:
+        return [f"{goimports} -w $file"], "goimports (auto-detected)"
+    gofmt = _find_go_tool("gofmt")
+    if gofmt:
+        return [f"{gofmt} -w $file"], "gofmt (auto-detected)"
     return ["gofmt -w $file"], "gofmt (default)"
 
 

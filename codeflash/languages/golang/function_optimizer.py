@@ -64,10 +64,12 @@ class GoFunctionOptimizer(FunctionOptimizer):
         original_helper_code: dict[Path, str],
     ) -> bool:
         from codeflash.languages.code_replacer import replace_function_definitions_for_language
+        from codeflash.languages.golang.formatter import format_go_code
 
         did_update = False
+        modified_files: list[Path] = []
         for module_abspath, qualified_names in self.group_functions_by_file(code_context).items():
-            did_update |= replace_function_definitions_for_language(
+            updated = replace_function_definitions_for_language(
                 function_names=list(qualified_names),
                 optimized_code=optimized_code,
                 module_abspath=module_abspath,
@@ -75,7 +77,27 @@ class GoFunctionOptimizer(FunctionOptimizer):
                 lang_support=self.language_support,
                 function_to_optimize=self.function_to_optimize,
             )
+            if updated:
+                modified_files.append(module_abspath)
+            did_update |= updated
+
+        for file_path in modified_files:
+            source = file_path.read_text(encoding="utf-8")
+            formatted = format_go_code(source, file_path)
+            if formatted != source:
+                file_path.write_text(formatted, encoding="utf-8")
+
         return did_update
+
+
+def _extract_package_name(file_path: Path) -> str | None:
+    from codeflash.languages.golang.parser import GoAnalyzer
+
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return GoAnalyzer().find_package_name(source)
 
 
 def _build_optimization_context(
@@ -86,6 +108,8 @@ def _build_optimization_context(
     optim_token_limit: int = OPTIMIZATION_CONTEXT_TOKEN_LIMIT,
     testgen_token_limit: int = TESTGEN_CONTEXT_TOKEN_LIMIT,
 ) -> CodeOptimizationContext:
+    package_name = _extract_package_name(file_path)
+
     if code_context.imports:
         inner = "\n".join(f"\t{imp}" for imp in code_context.imports)
         imports_code = f"import (\n{inner}\n)"
@@ -120,6 +144,9 @@ def _build_optimization_context(
 
     if imports_code:
         target_file_code = imports_code + "\n\n" + target_file_code
+
+    if package_name:
+        target_file_code = f"package {package_name}\n\n" + target_file_code
 
     read_writable_code_strings = [CodeString(code=target_file_code, file_path=target_relative_path, language=language)]
 

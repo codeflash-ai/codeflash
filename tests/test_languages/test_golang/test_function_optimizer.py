@@ -161,6 +161,8 @@ class TestBuildContextExportedFunction:
         code = result.read_writable_code.code_strings[0].code
 
         expected = dedent("""\
+            package calc
+
             import (
             \t"fmt"
             \t"math"
@@ -174,10 +176,10 @@ class TestBuildContextExportedFunction:
         """)
         assert code == expected
 
-    def test_code_excludes_package_clause(self, tmp_path: Path) -> None:
+    def test_code_includes_package_clause(self, tmp_path: Path) -> None:
         result = _build_context_for_function(CALCULATOR_SOURCE, "calc.go", "Add", tmp_path)
         code = result.read_writable_code.code_strings[0].code
-        assert "package calc" not in code
+        assert code.startswith("package calc\n")
 
     def test_code_excludes_struct_definition(self, tmp_path: Path) -> None:
         result = _build_context_for_function(CALCULATOR_SOURCE, "calc.go", "Add", tmp_path)
@@ -235,6 +237,8 @@ class TestBuildContextPointerReceiverMethod:
         code = result.read_writable_code.code_strings[0].code
 
         expected = dedent("""\
+            package calc
+
             import (
             \t"fmt"
             \t"math"
@@ -250,10 +254,9 @@ class TestBuildContextPointerReceiverMethod:
         """)
         assert code == expected
 
-    def test_code_excludes_package_and_type_defs(self, tmp_path: Path) -> None:
+    def test_code_excludes_type_defs(self, tmp_path: Path) -> None:
         result = self._build(tmp_path)
         code = result.read_writable_code.code_strings[0].code
-        assert "package calc" not in code
         assert "type Calculator struct" not in code
         assert "type Formatter interface" not in code
 
@@ -334,10 +337,12 @@ class TestBuildContextValueReceiverMethod:
 class TestBuildContextMinimalSource:
     """Target: Double(x int) — minimal file with no imports or structs."""
 
-    def test_no_imports_no_prefix(self, tmp_path: Path) -> None:
+    def test_no_imports_package_only_prefix(self, tmp_path: Path) -> None:
         result = _build_context_for_function(SIMPLE_SOURCE, "simple.go", "Double", tmp_path)
         code = result.read_writable_code.code_strings[0].code
         assert code == dedent("""\
+            package simple
+
             func Double(x int) int {
             \treturn x * 2
             }""")

@@ -55,7 +55,9 @@ class TestNormalizeGoCode:
             "}\n"
         )
         result = normalize_go_code(source)
-        expected = "package calc\nfunc Add(a, b int) int {\nreturn a + b\n}\nfunc Subtract(a, b int) int {\nreturn a - b\n}"
+        expected = (
+            "package calc\nfunc Add(a, b int) int {\nreturn a + b\n}\nfunc Subtract(a, b int) int {\nreturn a - b\n}"
+        )
         assert result == expected
 
     def test_inline_block_comment(self) -> None:
@@ -76,7 +78,7 @@ class TestNormalizeGoCode:
 class TestFormatGoCode:
     def test_no_formatter_returns_source(self) -> None:
         source = "package calc\n\nfunc Add(a, b int) int {\nreturn a+b\n}\n"
-        with patch("codeflash.languages.golang.formatter.shutil.which", return_value=None):
+        with patch("codeflash.languages.golang.formatter._find_go_tool", return_value=None):
             result = format_go_code(source)
         assert result == source
 

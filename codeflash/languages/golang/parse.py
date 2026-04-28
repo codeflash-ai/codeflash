@@ -43,8 +43,8 @@ def parse_go_test_output(
         logger.warning("No valid JSON events found in %s", test_json_path)
         return test_results
 
-    test_states: dict[str, _TestState] = {}
-    benchmark_results: dict[str, _BenchmarkResult] = {}
+    iterations: list[_TestIteration] = []
+    active: dict[str, _TestIteration] = {}
 
     for event in events:
         action = event.get("Action")
@@ -52,70 +52,85 @@ def parse_go_test_output(
         package = event.get("Package", "")
 
         if test_name is None:
+            if action == "output":
+                output_text = event.get("Output", "")
+                bench_match = BENCHMARK_RE.search(output_text)
+                if bench_match:
+                    bench_name = bench_match.group(1)
+                    it = _TestIteration(test_name=bench_name, package=package)
+                    it.passed = True
+                    it.bench_ns_per_op = float(bench_match.group(3))
+                    it.bench_iterations = int(bench_match.group(2))
+                    it.stdout = output_text
+                    iterations.append(it)
             continue
 
-        if test_name not in test_states:
-            test_states[test_name] = _TestState(package=package)
+        if action == "run":
+            if test_name in active:
+                iterations.append(active[test_name])
+            active[test_name] = _TestIteration(test_name=test_name, package=package)
+            continue
 
-        state = test_states[test_name]
+        it = active.get(test_name)
+        if it is None:
+            it = _TestIteration(test_name=test_name, package=package)
+            active[test_name] = it
 
         if action == "output":
             output_text = event.get("Output", "")
-            state.stdout += output_text
+            it.stdout += output_text
             bench_match = BENCHMARK_RE.search(output_text)
             if bench_match:
-                bench_name = bench_match.group(1)
-                iterations = int(bench_match.group(2))
-                ns_per_op = float(bench_match.group(3))
-                b_per_op = int(bench_match.group(4)) if bench_match.group(4) else None
-                allocs_per_op = int(bench_match.group(5)) if bench_match.group(5) else None
-                benchmark_results[bench_name] = _BenchmarkResult(
-                    ns_per_op=ns_per_op, iterations=iterations, b_per_op=b_per_op, allocs_per_op=allocs_per_op
-                )
-        elif action == "pass":
-            state.passed = True
+                it.bench_ns_per_op = float(bench_match.group(3))
+                it.bench_iterations = int(bench_match.group(2))
+        elif action in ("pass", "fail"):
+            it.passed = action == "pass"
             elapsed = event.get("Elapsed", 0)
-            state.runtime_ns = int(elapsed * 1_000_000_000) if elapsed else None
-        elif action == "fail":
-            state.passed = False
-            elapsed = event.get("Elapsed", 0)
-            state.runtime_ns = int(elapsed * 1_000_000_000) if elapsed else None
+            it.elapsed_ns = int(elapsed * 1_000_000_000) if elapsed else None
+            iterations.append(active.pop(test_name))
 
+    for it in active.values():
+        if it.passed is not None:
+            iterations.append(it)
+
+    loop_counters: dict[str, int] = {}
     base_dir = test_config.tests_project_rootdir
 
-    for test_name, state in test_states.items():
-        if state.passed is None:
+    for it in iterations:
+        if it.passed is None:
             continue
 
-        test_file_path = _resolve_test_file(test_name, state.package, test_files, base_dir)
+        loop_index = loop_counters.get(it.test_name, 0) + 1
+        loop_counters[it.test_name] = loop_index
+
+        runtime_ns = it.bench_ns_per_op if it.bench_ns_per_op is not None else it.elapsed_ns
+        if runtime_ns is not None:
+            runtime_ns = int(runtime_ns)
+
+        test_file_path = _resolve_test_file(it.test_name, it.package, test_files, base_dir)
         test_type = _resolve_test_type(test_file_path, test_files)
         if test_type is None:
-            logger.debug("Skipping test %s: could not resolve test type", test_name)
+            logger.debug("Skipping test %s: could not resolve test type", it.test_name)
             continue
-
-        runtime_ns = state.runtime_ns
-        bench = benchmark_results.get(test_name)
-        if bench is not None:
-            runtime_ns = int(bench.ns_per_op)
 
         test_results.add(
             FunctionTestInvocation(
-                loop_index=1,
+                loop_index=loop_index,
                 id=InvocationId(
-                    test_module_path=state.package,
+                    test_module_path=it.package,
                     test_class_name=None,
-                    test_function_name=test_name,
+                    test_function_name=it.test_name,
                     function_getting_tested="",
                     iteration_id="",
                 ),
                 file_name=test_file_path,
                 runtime=runtime_ns,
                 test_framework="go-test",
-                did_pass=state.passed,
+                did_pass=it.passed,
                 test_type=test_type,
                 return_value=None,
                 timed_out=False,
-                stdout=state.stdout,
+                stdout=it.stdout,
             )
         )
 
@@ -124,29 +139,22 @@ def parse_go_test_output(
         if run_result is not None:
             logger.debug("stdout: %s\nstderr: %s", run_result.stdout, run_result.stderr)
 
+    logger.debug("[BENCHMARK-DONE] Got %d benchmark results", len(test_results))
+
     return test_results
 
 
-class _TestState:
-    __slots__ = ("package", "passed", "runtime_ns", "stdout")
+class _TestIteration:
+    __slots__ = ("bench_iterations", "bench_ns_per_op", "elapsed_ns", "package", "passed", "stdout", "test_name")
 
-    def __init__(self, package: str) -> None:
+    def __init__(self, test_name: str, package: str) -> None:
+        self.test_name = test_name
         self.package = package
         self.passed: bool | None = None
-        self.runtime_ns: int | None = None
+        self.elapsed_ns: int | None = None
+        self.bench_ns_per_op: float | None = None
+        self.bench_iterations: int | None = None
         self.stdout: str = ""
-
-
-class _BenchmarkResult:
-    __slots__ = ("allocs_per_op", "b_per_op", "iterations", "ns_per_op")
-
-    def __init__(
-        self, ns_per_op: float, iterations: int, b_per_op: int | None = None, allocs_per_op: int | None = None
-    ) -> None:
-        self.ns_per_op = ns_per_op
-        self.iterations = iterations
-        self.b_per_op = b_per_op
-        self.allocs_per_op = allocs_per_op
 
 
 def _read_json_output(path: Path, run_result: subprocess.CompletedProcess | None) -> str:

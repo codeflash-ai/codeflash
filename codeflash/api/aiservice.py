@@ -113,8 +113,6 @@ class AiServiceClient:
         url = f"{self.base_url}/ai{endpoint}"
         if method.upper() == "POST":
             json_payload = json.dumps(payload, indent=None, default=pydantic_encoder)
-            print(f"url: {url}")
-            print(f"payload: {json_payload}")
             headers = {**self.headers, "Content-Type": "application/json"}
             response = requests.post(url, data=json_payload, headers=headers, timeout=timeout)
         else:

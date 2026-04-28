@@ -220,16 +220,25 @@ class GoSupport:
         return source
 
     def instrument_for_benchmarking(self, test_source: str, target_function: FunctionToOptimize) -> str:
-        return test_source
+        from codeflash.languages.golang.instrumentation import convert_tests_to_benchmarks
+
+        func_name = target_function.function_name if target_function else ""
+        return convert_tests_to_benchmarks(test_source, func_name)
 
     def instrument_existing_test(
         self, test_path: Path, call_positions: Any, function_to_optimize: Any, tests_project_root: Path, mode: str
     ) -> tuple[bool, str | None]:
-        _ = call_positions, function_to_optimize, tests_project_root, mode
+        _ = call_positions, tests_project_root
         try:
-            return True, test_path.read_text(encoding="utf-8")
+            source = test_path.read_text(encoding="utf-8")
         except Exception:
             return False, None
+        if mode == "performance":
+            from codeflash.languages.golang.instrumentation import convert_tests_to_benchmarks
+
+            func_name = function_to_optimize.function_name if function_to_optimize else ""
+            source = convert_tests_to_benchmarks(source, func_name)
+        return True, source
 
     def postprocess_generated_tests(
         self, generated_tests: GeneratedTestsList, test_framework: str, project_root: Path, source_file_path: Path
@@ -247,7 +256,11 @@ class GoSupport:
         test_cfg: Any,
         project_module_system: str | None,
     ) -> tuple[str, str, str]:
-        _ = function_to_optimize, test_path, test_cfg, project_module_system
+        _ = test_path, test_cfg, project_module_system
+        from codeflash.languages.golang.instrumentation import convert_tests_to_benchmarks
+
+        func_name = function_to_optimize.function_name if function_to_optimize else ""
+        instrumented_perf_test_source = convert_tests_to_benchmarks(instrumented_perf_test_source, func_name)
         return generated_test_source, instrumented_behavior_test_source, instrumented_perf_test_source
 
     def load_coverage(self, *args: Any, **kwargs: Any) -> Any:
@@ -255,6 +268,14 @@ class GoSupport:
 
     def get_test_file_suffix(self) -> str:
         return "_test.go"
+
+    def resolve_test_file_from_class_path(self, test_class_path: str, base_dir: Path) -> Path | None:
+        return None
+
+    def resolve_test_module_path_for_pr(
+        self, test_module_path: str, tests_project_rootdir: Path, non_generated_tests: set[Path]
+    ) -> Path | None:
+        return None
 
     def find_test_root(self, project_root: Path) -> Path | None:
         return project_root

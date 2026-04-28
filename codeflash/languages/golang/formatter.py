@@ -12,26 +12,48 @@ logger = logging.getLogger(__name__)
 
 
 def format_go_code(source: str, file_path: Path | None = None) -> str:
-    gofmt = shutil.which("gofmt")
-    if gofmt is None:
-        goimports = shutil.which("goimports")
-        if goimports is not None:
-            gofmt = goimports
-        else:
-            logger.debug("No Go formatter found (gofmt/goimports), returning source unchanged")
-            return source
+    goimports = _find_go_tool("goimports")
+    if goimports is not None:
+        formatted = _run_formatter(goimports, source)
+        if formatted is not None:
+            return formatted
 
+    gofmt = _find_go_tool("gofmt")
+    if gofmt is not None:
+        formatted = _run_formatter(gofmt, source)
+        if formatted is not None:
+            return formatted
+
+    logger.debug("No Go formatter found (goimports/gofmt), returning source unchanged")
+    return source
+
+
+def _find_go_tool(name: str) -> str | None:
+    import os
+    from pathlib import Path
+
+    found = shutil.which(name)
+    if found:
+        return found
+    gopath = os.environ.get("GOPATH") or str(Path.home() / "go")
+    for bin_dir in ("bin", str(Path("packages") / "bin")):
+        candidate = Path(gopath) / bin_dir / name
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def _run_formatter(tool: str, source: str) -> str | None:
     try:
-        result = subprocess.run([gofmt], input=source, capture_output=True, text=True, timeout=15, check=False)
+        result = subprocess.run([tool], input=source, capture_output=True, text=True, timeout=15, check=False)
         if result.returncode == 0:
             return result.stdout
-        logger.debug("gofmt failed: %s", result.stderr)
+        logger.debug("%s failed: %s", tool, result.stderr)
     except subprocess.TimeoutExpired:
-        logger.warning("gofmt timed out")
+        logger.warning("%s timed out", tool)
     except Exception:
-        logger.debug("gofmt error", exc_info=True)
-
-    return source
+        logger.debug("%s error", tool, exc_info=True)
+    return None
 
 
 def normalize_go_code(source: str) -> str:
