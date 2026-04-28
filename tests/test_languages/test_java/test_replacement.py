@@ -15,14 +15,14 @@ from codeflash.models.models import CodeStringsMarkdown
 
 
 @pytest.fixture
-def java_support():
+def java_support() -> JavaSupport:
     return JavaSupport()
 
 
 class TestReplaceFunctionDefinitionsInModule:
     """Tests for replace_function_definitions_for_language with Java (basic cases)."""
 
-    def test_replace_simple_method(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_simple_method(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a simple method in a Java class."""
         java_file = tmp_path / "Calculator.java"
         original_code = """public class Calculator {
@@ -61,7 +61,7 @@ public class Calculator {{
 """
         assert new_code == expected
 
-    def test_replace_method_preserves_other_methods(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_preserves_other_methods(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test that replacing one method preserves other methods."""
         java_file = tmp_path / "Calculator.java"
         original_code = """public class Calculator {
@@ -124,7 +124,7 @@ public class Calculator {{
 """
         assert new_code == expected
 
-    def test_replace_method_with_javadoc(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_with_javadoc(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a method that has Javadoc comments."""
         java_file = tmp_path / "MathUtils.java"
         original_code = """public class MathUtils {
@@ -193,7 +193,7 @@ public class MathUtils {{
 """
         assert new_code == expected
 
-    def test_no_change_when_code_identical(self, tmp_path: Path, java_support: JavaSupport):
+    def test_no_change_when_code_identical(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test that no change is made when optimized code is identical."""
         java_file = tmp_path / "Identity.java"
         original_code = """public class Identity {
@@ -230,7 +230,7 @@ public class Identity {{
 class TestReplaceFunctionDefinitionsForLanguage:
     """Tests for replace_function_definitions_for_language with Java."""
 
-    def test_replace_static_method(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_static_method(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a static method."""
         java_file = tmp_path / "Utils.java"
         original_code = """public class Utils {
@@ -269,7 +269,7 @@ public class Utils {{
 """
         assert new_code == expected
 
-    def test_replace_method_with_annotations(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_with_annotations(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a method with annotations."""
         java_file = tmp_path / "Service.java"
         original_code = """public class Service {
@@ -311,7 +311,7 @@ public class Service {{
 """
         assert new_code == expected
 
-    def test_replace_method_in_interface(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_in_interface(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a default method in an interface."""
         java_file = tmp_path / "Processor.java"
         original_code = """public interface Processor {
@@ -350,7 +350,7 @@ public interface Processor {{
 """
         assert new_code == expected
 
-    def test_replace_method_in_enum(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_in_enum(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a method in an enum."""
         java_file = tmp_path / "Color.java"
         original_code = """public enum Color {
@@ -395,7 +395,7 @@ public enum Color {{
 """
         assert new_code == expected
 
-    def test_replace_generic_method(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_generic_method(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a method with generics."""
         java_file = tmp_path / "Container.java"
         original_code = """import java.util.List;
@@ -453,7 +453,7 @@ public class Container<T> {
 """
         assert new_code == expected
 
-    def test_replace_method_with_throws(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_with_throws(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a method with throws clause."""
         java_file = tmp_path / "FileReader.java"
         original_code = """import java.io.IOException;
@@ -508,7 +508,7 @@ public class FileReader {
 class TestRealWorldOptimizationScenarios:
     """Real-world optimization scenarios with complete valid Java code."""
 
-    def test_optimize_string_concatenation(self, tmp_path: Path, java_support: JavaSupport):
+    def test_optimize_string_concatenation(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimizing string concatenation to StringBuilder."""
         java_file = tmp_path / "StringJoiner.java"
         original_code = """public class StringJoiner {
@@ -559,7 +559,7 @@ public class StringJoiner {{
 """
         assert new_code == expected
 
-    def test_optimize_list_iteration(self, tmp_path: Path, java_support: JavaSupport):
+    def test_optimize_list_iteration(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimizing list iteration with streams."""
         java_file = tmp_path / "ListProcessor.java"
         original_code = """import java.util.List;
@@ -608,7 +608,7 @@ public class ListProcessor {
 """
         assert new_code == expected
 
-    def test_optimize_null_checks(self, tmp_path: Path, java_support: JavaSupport):
+    def test_optimize_null_checks(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimizing null checks with Objects utility."""
         java_file = tmp_path / "NullChecker.java"
         original_code = """public class NullChecker {
@@ -655,7 +655,7 @@ public class NullChecker {{
 """
         assert new_code == expected
 
-    def test_optimize_collection_creation(self, tmp_path: Path, java_support: JavaSupport):
+    def test_optimize_collection_creation(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimizing collection creation with factory methods."""
         java_file = tmp_path / "CollectionFactory.java"
         original_code = """import java.util.ArrayList;
@@ -711,7 +711,7 @@ public class CollectionFactory {
 class TestMultipleClassesAndMethods:
     """Tests for files with multiple classes or multiple methods being optimized."""
 
-    def test_replace_method_in_first_class(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_in_first_class(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a method in the first class when multiple classes exist."""
         java_file = tmp_path / "MultiClass.java"
         original_code = """public class Calculator {
@@ -768,7 +768,7 @@ class Helper {
 """
         assert new_code == expected
 
-    def test_replace_multiple_methods(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_multiple_methods(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing multiple methods in the same class."""
         java_file = tmp_path / "MathOps.java"
         original_code = """public class MathOps {
@@ -835,7 +835,7 @@ public class MathOps {{
 class TestNestedClasses:
     """Tests for nested class scenarios."""
 
-    def test_replace_method_in_nested_class(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_method_in_nested_class(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Nested class methods are skipped by discovery (PR #1726), so replacement returns False."""
         java_file = tmp_path / "Outer.java"
         original_code = """public class Outer {
@@ -882,7 +882,7 @@ public class Outer {{
 class TestPreservesStructure:
     """Tests that verify code structure is preserved during replacement."""
 
-    def test_preserves_fields_and_constructors(self, tmp_path: Path, java_support: JavaSupport):
+    def test_preserves_fields_and_constructors(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test that fields and constructors are preserved."""
         java_file = tmp_path / "Counter.java"
         original_code = """public class Counter {
@@ -952,7 +952,7 @@ public class Counter {{
 class TestEdgeCases:
     """Edge cases and error handling tests."""
 
-    def test_empty_optimized_code_returns_false(self, tmp_path: Path, java_support: JavaSupport):
+    def test_empty_optimized_code_returns_false(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test that empty optimized code returns False."""
         java_file = tmp_path / "Empty.java"
         original_code = """public class Empty {
@@ -980,7 +980,7 @@ class TestEdgeCases:
         new_code = java_file.read_text(encoding="utf-8")
         assert new_code == original_code
 
-    def test_function_not_found_returns_false(self, tmp_path: Path, java_support: JavaSupport):
+    def test_function_not_found_returns_false(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test that function not found returns False."""
         java_file = tmp_path / "NotFound.java"
         original_code = """public class NotFound {
@@ -1011,7 +1011,7 @@ public class NotFound {{
 
         assert result is False
 
-    def test_unicode_in_code(self, tmp_path: Path, java_support: JavaSupport):
+    def test_unicode_in_code(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test handling of unicode characters in code."""
         java_file = tmp_path / "Unicode.java"
         original_code = """public class Unicode {
@@ -1054,7 +1054,7 @@ public class Unicode {{
 class TestOptimizationWithStaticFields:
     """Tests for optimizations that add new static fields to the class."""
 
-    def test_add_static_lookup_table(self, tmp_path: Path, java_support: JavaSupport):
+    def test_add_static_lookup_table(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimization that adds a static lookup table."""
         java_file = tmp_path / "Buffer.java"
         original_code = """public class Buffer {
@@ -1114,7 +1114,7 @@ public class Buffer {{
 """
         assert new_code == expected
 
-    def test_add_precomputed_array(self, tmp_path: Path, java_support: JavaSupport):
+    def test_add_precomputed_array(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimization that adds a precomputed static array."""
         java_file = tmp_path / "Encoder.java"
         original_code = """public class Encoder {
@@ -1174,7 +1174,7 @@ public class Encoder {{
 """
         assert new_code == expected
 
-    def test_preserve_existing_fields(self, tmp_path: Path, java_support: JavaSupport):
+    def test_preserve_existing_fields(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test that existing fields are preserved when adding new ones."""
         java_file = tmp_path / "Calculator.java"
         original_code = """public class Calculator {
@@ -1260,7 +1260,7 @@ public class Calculator {{
 class TestOptimizationWithHelperMethods:
     """Tests for optimizations that add new helper methods."""
 
-    def test_add_private_helper_method(self, tmp_path: Path, java_support: JavaSupport):
+    def test_add_private_helper_method(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimization that adds a private helper method."""
         java_file = tmp_path / "StringUtils.java"
         original_code = """public class StringUtils {
@@ -1330,7 +1330,7 @@ public class StringUtils {{
 """
         assert new_code == expected
 
-    def test_add_multiple_helpers(self, tmp_path: Path, java_support: JavaSupport):
+    def test_add_multiple_helpers(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimization that adds multiple helper methods."""
         java_file = tmp_path / "MathUtils.java"
         original_code = """public class MathUtils {
@@ -1395,7 +1395,7 @@ public class MathUtils {{
 class TestOptimizationWithFieldsAndHelpers:
     """Tests for optimizations that add both static fields and helper methods."""
 
-    def test_add_field_and_helper_together(self, tmp_path: Path, java_support: JavaSupport):
+    def test_add_field_and_helper_together(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test optimization that adds both a static field and helper method."""
         java_file = tmp_path / "Fibonacci.java"
         original_code = """public class Fibonacci {
@@ -1464,7 +1464,7 @@ public class Fibonacci {{
 """
         assert new_code == expected
 
-    def test_real_world_bytes_to_hex_optimization(self, tmp_path: Path, java_support: JavaSupport):
+    def test_real_world_bytes_to_hex_optimization(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test the actual bytesToHexString optimization pattern from aerospike."""
         java_file = tmp_path / "Buffer.java"
         original_code = """package com.example;
@@ -1561,7 +1561,7 @@ public final class Buffer {
 class TestOverloadedMethods:
     """Tests for handling overloaded methods (same name, different signatures)."""
 
-    def test_replace_specific_overload_by_line_number(self, tmp_path: Path, java_support: JavaSupport):
+    def test_replace_specific_overload_by_line_number(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Test replacing a specific overload when multiple exist."""
         java_file = tmp_path / "Buffer.java"
         original_code = """public final class Buffer {
@@ -1615,7 +1615,6 @@ public final class Buffer {{
             starting_line=13,  # Line where 3-arg version starts (1-indexed)
             ending_line=18,
             parents=[FunctionParent(name="Buffer", type="ClassDef")],
-            qualified_name="Buffer.bytesToHexString",
             is_method=True,
         )
 
@@ -1670,7 +1669,7 @@ class TestWrongMethodNameGeneration:
     source file unchanged.
     """
 
-    def test_standalone_wrong_method_name_leaves_source_unchanged(self, tmp_path, java_support):
+    def test_standalone_wrong_method_name_leaves_source_unchanged(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Standalone generated method with wrong name must not replace the target.
 
         Reproduces the Unpacker.unpackObjectMap bug: the LLM was asked to optimise
@@ -1710,7 +1709,6 @@ public final Object unpackMap() {{
             starting_line=2,
             ending_line=4,
             parents=[FunctionParent(name="Unpacker", type="ClassDef")],
-            qualified_name="Unpacker.unpackObjectMap",
             is_method=True,
         )
 
@@ -1726,7 +1724,7 @@ public final Object unpackMap() {{
         assert result is False
         assert java_file.read_text(encoding="utf-8") == original_code
 
-    def test_class_wrapper_with_wrong_target_method_leaves_source_unchanged(self, tmp_path, java_support):
+    def test_class_wrapper_with_wrong_target_method_leaves_source_unchanged(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Class-wrapped generated code missing the target method must not modify source.
 
         Reproduces the Command.estimateKeySize bug: the LLM generated a class that
@@ -1767,7 +1765,6 @@ public class Command {{
             starting_line=2,
             ending_line=4,
             parents=[FunctionParent(name="Command", type="ClassDef")],
-            qualified_name="Command.estimateKeySize",
             is_method=True,
         )
 
@@ -1795,7 +1792,7 @@ class TestAnonymousInnerClassMethods:
     enclosing method scope.
     """
 
-    def test_anonymous_iterator_methods_not_hoisted_to_class(self, tmp_path, java_support):
+    def test_anonymous_iterator_methods_not_hoisted_to_class(self, tmp_path: Path, java_support: JavaSupport) -> None:
         """Reproduces the LuaMap.keySetIterator bug.
 
         The LLM optimised ``keySetIterator`` by returning an anonymous
@@ -1876,7 +1873,6 @@ public final class LuaMap {{
             starting_line=11,
             ending_line=13,
             parents=[FunctionParent(name="LuaMap", type="ClassDef")],
-            qualified_name="LuaMap.keySetIterator",
             is_method=True,
         )
 
@@ -1929,3 +1925,236 @@ public final class LuaMap {
 }
 """
         assert new_code == expected_code
+
+
+class TestUnusedAdditionsRejection:
+    """Tests that optimizations adding unused fields/helpers with unchanged target method are rejected."""
+
+    def test_unchanged_method_with_unused_field_rejected(self, tmp_path: Path, java_support: JavaSupport) -> None:
+        """An optimization that adds a field but doesn't change the method should be rejected."""
+        java_file = (tmp_path / "SystemUtils.java").resolve()
+        original_code = """public class SystemUtils {
+    public static String getJavaIoTmpdir() {
+        return System.getProperty("java.io.tmpdir");
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds NULL_SUPPLIER but doesn't change getJavaIoTmpdir
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class SystemUtils {{
+    private static final String CACHED_TMPDIR = System.getProperty("java.io.tmpdir");
+
+    public static String getJavaIoTmpdir() {{
+        return System.getProperty("java.io.tmpdir");
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="getJavaIoTmpdir",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="SystemUtils", type="ClassDef")],
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["getJavaIoTmpdir"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should reject: method unchanged, field unreferenced
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_unchanged_method_with_unused_helper_rejected(self, tmp_path: Path, java_support: JavaSupport) -> None:
+        """An optimization that adds a helper method but doesn't change the target should be rejected."""
+        java_file = (tmp_path / "Calculator.java").resolve()
+        original_code = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds a helper method but doesn't change add()
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    private static int fastAdd(int a, int b) {{
+        return Math.addExact(a, b);
+    }}
+
+    public int add(int a, int b) {{
+        return a + b;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="add",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Calculator", type="ClassDef")],
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["add"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should reject: method unchanged, helper unreferenced
+        assert result is False
+        assert java_file.read_text(encoding="utf-8") == original_code
+
+    def test_changed_method_with_used_field_accepted(self, tmp_path: Path, java_support: JavaSupport) -> None:
+        """An optimization that adds a field AND uses it in the changed method should be accepted."""
+        java_file = (tmp_path / "SystemUtils.java").resolve()
+        original_code = """public class SystemUtils {
+    public static String getJavaIoTmpdir() {
+        return System.getProperty("java.io.tmpdir");
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds CACHED_TMPDIR and actually uses it in the method
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class SystemUtils {{
+    private static final String CACHED_TMPDIR = System.getProperty("java.io.tmpdir");
+
+    public static String getJavaIoTmpdir() {{
+        return CACHED_TMPDIR;
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="getJavaIoTmpdir",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="SystemUtils", type="ClassDef")],
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["getJavaIoTmpdir"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should accept: method changed to use CACHED_TMPDIR
+        assert result is True
+        new_code = java_file.read_text(encoding="utf-8")
+        assert "CACHED_TMPDIR" in new_code
+        assert "private static final String CACHED_TMPDIR" in new_code
+
+    def test_changed_method_without_additions_accepted(self, tmp_path: Path, java_support: JavaSupport) -> None:
+        """A normal optimization that just changes the method body should be accepted."""
+        java_file = (tmp_path / "Calculator.java").resolve()
+        original_code = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    public int add(int a, int b) {{
+        return Math.addExact(a, b);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        result = replace_function_definitions_for_language(
+            function_names=["add"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+        )
+
+        # Should accept: method was changed
+        assert result is True
+
+    def test_unchanged_method_with_used_helper_accepted(self, tmp_path: Path, java_support: JavaSupport) -> None:
+        """Method unchanged but references the new helper — should be accepted (helper IS used)."""
+        java_file = (tmp_path / "Calculator.java").resolve()
+        original_code = """public class Calculator {
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+"""
+        java_file.write_text(original_code, encoding="utf-8")
+
+        # AI adds helper AND rewrites method to use it
+        optimized_markdown = f"""```java:{java_file.relative_to(tmp_path)}
+public class Calculator {{
+    private static int fastAdd(int a, int b) {{
+        return Math.addExact(a, b);
+    }}
+
+    public int add(int a, int b) {{
+        return fastAdd(a, b);
+    }}
+}}
+```"""
+
+        optimized_code = CodeStringsMarkdown.parse_markdown_code(optimized_markdown, expected_language="java")
+
+        from codeflash.discovery.functions_to_optimize import FunctionParent, FunctionToOptimize
+
+        function_to_optimize = FunctionToOptimize(
+            function_name="add",
+            file_path=java_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[FunctionParent(name="Calculator", type="ClassDef")],
+            is_method=True,
+        )
+
+        result = replace_function_definitions_for_language(
+            function_names=["add"],
+            optimized_code=optimized_code,
+            module_abspath=java_file,
+            project_root_path=tmp_path,
+            lang_support=java_support,
+            function_to_optimize=function_to_optimize,
+        )
+
+        # Should accept: method changed to call fastAdd
+        assert result is True

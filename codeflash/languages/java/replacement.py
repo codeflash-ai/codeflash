@@ -158,6 +158,60 @@ def _parse_optimization_source(new_source: str, target_method_name: str, analyze
     )
 
 
+def _has_unused_additions(parsed: ParsedOptimization, original_method_source: str, analyzer: JavaAnalyzer) -> bool:
+    """Check if an optimization adds fields/helpers that the target method never references.
+
+    Returns True if the optimization has additions (fields/helpers) that are completely
+    unreferenced by the target method body. This catches fake optimizations where the AI
+    adds new code but leaves the target method unchanged.
+
+    Returns False (additions are used / no problem) when:
+    - There are no additions
+    - At least one addition's identifier appears in the target method body
+    - The target method itself was changed
+    """
+    has_additions = bool(parsed.new_fields or parsed.helpers_before_target or parsed.helpers_after_target)
+    if not has_additions:
+        return False
+
+    # Normalize whitespace for comparison: strip leading/trailing whitespace from each line
+    def normalize_ws(s: str) -> str:
+        return "\n".join(line.strip() for line in s.strip().splitlines() if line.strip())
+
+    if normalize_ws(parsed.target_method_source) != normalize_ws(original_method_source):
+        # Target method was actually changed — additions may or may not be used,
+        # but the optimization is not a no-op on the target function.
+        return False
+
+    # Target method is unchanged. Check if any addition identifiers are referenced.
+    addition_names: set[str] = set()
+
+    for field_src in parsed.new_fields:
+        dummy_class = f"class __Dummy__ {{\n{field_src}\n}}"
+        for field_info in analyzer.find_fields(dummy_class):
+            addition_names.add(field_info.name)
+
+    for helper_src in parsed.helpers_before_target + parsed.helpers_after_target:
+        for method_info in analyzer.find_methods(helper_src):
+            addition_names.add(method_info.name)
+
+    if not addition_names:
+        return False
+
+    # Check if any addition name appears in the target method body as a word boundary match
+    target_body = parsed.target_method_source
+    for name in addition_names:
+        if re.search(rf"\b{re.escape(name)}\b", target_body):
+            return False  # At least one addition is referenced
+
+    logger.info(
+        "Rejecting optimization: target method '%s' is unchanged and new additions %s are unreferenced.",
+        "target",
+        addition_names,
+    )
+    return True
+
+
 def _dedent_member(source: str) -> str:
     """Strip the common leading whitespace from a class member source."""
     return textwrap.dedent(source).strip()
@@ -457,6 +511,23 @@ def replace_function(
 
     if not target_method:
         logger.error("Could not find method %s in source", func_name)
+        return source
+
+    # Extract original method source for comparison
+    orig_start = (target_method.javadoc_start_line or target_method.start_line) - 1
+    orig_end = target_method.end_line
+    orig_lines = source.splitlines(keepends=True)
+    original_method_source = "".join(orig_lines[orig_start:orig_end])
+
+    # Reject optimizations that add unused code while leaving the target method unchanged.
+    # This catches fake optimizations (e.g., adding a static field that the method never references)
+    # that produce spurious speedups from benchmark noise.
+    if _has_unused_additions(parsed, original_method_source, analyzer):
+        logger.warning(
+            "Optimization for '%s' adds unreferenced fields/helpers without changing the target method. "
+            "Returning original source.",
+            func_name,
+        )
         return source
 
     # Get the class name for inserting new members
