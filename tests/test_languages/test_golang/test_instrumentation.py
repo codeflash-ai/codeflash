@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from codeflash.languages.golang.instrumentation import convert_tests_to_benchmarks
+from codeflash.languages.golang.instrumentation import _test_matches_target, convert_tests_to_benchmarks
 
 SIMPLE_TEST = """\
 package sample
@@ -100,6 +100,26 @@ func TestBar(t *testing.T) {
 """
 
 
+class TestMatchesTarget:
+    def test_exact_match(self) -> None:
+        assert _test_matches_target("TestBFS", "BFS") is True
+
+    def test_prefix_segment_match(self) -> None:
+        assert _test_matches_target("TestBFS_BasicCases", "BFS") is True
+
+    def test_suffix_segment_match(self) -> None:
+        assert _test_matches_target("TestGraph_BFS", "BFS") is True
+
+    def test_no_match_substring(self) -> None:
+        assert _test_matches_target("TestBFSHelper", "BFS") is False
+
+    def test_no_match_different_function(self) -> None:
+        assert _test_matches_target("TestDFS", "BFS") is False
+
+    def test_multi_underscore(self) -> None:
+        assert _test_matches_target("TestBFS_Large_Graph", "BFS") is True
+
+
 class TestConvertTestsToBenchmarks:
     def test_simple_test(self) -> None:
         result = convert_tests_to_benchmarks(SIMPLE_TEST, "Add")
@@ -114,8 +134,15 @@ class TestConvertTestsToBenchmarks:
         assert "func BenchmarkBubbleSort_BasicCases(" in result
         assert "*testing.T" not in result
 
-    def test_multiple_functions(self) -> None:
+    def test_multiple_functions_filtered(self) -> None:
         result = convert_tests_to_benchmarks(MULTIPLE_TESTS, "Foo")
+        assert "func BenchmarkFoo(" in result
+        assert "func BenchmarkBar(" not in result
+        assert "func TestFoo(" not in result
+        assert "func TestBar(" not in result
+
+    def test_multiple_functions_no_filter(self) -> None:
+        result = convert_tests_to_benchmarks(MULTIPLE_TESTS, "")
         assert "func BenchmarkFoo(" in result
         assert "func BenchmarkBar(" in result
         assert "func TestFoo(" not in result
@@ -148,4 +175,4 @@ class TestConvertTestsToBenchmarks:
         assert ".Parallel()" not in result
         assert ".Helper()" not in result
         assert "func BenchmarkFoo(" in result
-        assert "func BenchmarkBar(" in result
+        assert "func BenchmarkBar(" not in result

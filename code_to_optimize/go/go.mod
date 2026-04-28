@@ -1,3 +1,3 @@
 module example/codeflash-go-sample
 
-go 1.21
+go 1.26
