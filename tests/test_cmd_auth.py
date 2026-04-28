@@ -9,8 +9,8 @@ from codeflash.either import Success
 
 
 class TestAuthLogin:
-    @patch("codeflash.cli_cmds.cmd_auth.get_codeflash_api_key")
-    @patch("codeflash.cli_cmds.cmd_auth.console")
+    @patch("codeflash.code_utils.env_utils.get_codeflash_api_key")
+    @patch("codeflash.cli_cmds.console.console")
     def test_existing_api_key_skips_oauth(self, mock_console: MagicMock, mock_get_key: MagicMock) -> None:
         mock_get_key.return_value = "cf-test1234abcd"
 
@@ -21,19 +21,19 @@ class TestAuthLogin:
             "To re-authenticate, unset [bold]CODEFLASH_API_KEY[/bold] and run this command again."
         )
 
-    @patch("codeflash.cli_cmds.cmd_auth.get_codeflash_api_key")
-    @patch("codeflash.cli_cmds.cmd_auth.console")
+    @patch("codeflash.code_utils.env_utils.get_codeflash_api_key")
+    @patch("codeflash.cli_cmds.console.console")
     def test_existing_api_key_oserror_treated_as_missing(
         self, mock_console: MagicMock, mock_get_key: MagicMock
     ) -> None:
         mock_get_key.side_effect = OSError("permission denied")
 
         with pytest.raises(SystemExit):
-            with patch("codeflash.cli_cmds.cmd_auth.perform_oauth_signin", return_value=None):
+            with patch("codeflash.cli_cmds.oauth_handler.perform_oauth_signin", return_value=None):
                 auth_login()
 
-    @patch("codeflash.cli_cmds.cmd_auth.perform_oauth_signin")
-    @patch("codeflash.cli_cmds.cmd_auth.get_codeflash_api_key", return_value="")
+    @patch("codeflash.cli_cmds.oauth_handler.perform_oauth_signin")
+    @patch("codeflash.code_utils.env_utils.get_codeflash_api_key", return_value="")
     def test_oauth_failure_exits_with_code_1(self, mock_get_key: MagicMock, mock_oauth: MagicMock) -> None:
         mock_oauth.return_value = None
 
@@ -41,10 +41,10 @@ class TestAuthLogin:
             auth_login()
 
     @patch("codeflash.cli_cmds.cmd_auth.os")
-    @patch("codeflash.cli_cmds.cmd_auth.save_api_key_to_rc")
-    @patch("codeflash.cli_cmds.cmd_auth.perform_oauth_signin")
-    @patch("codeflash.cli_cmds.cmd_auth.get_codeflash_api_key", return_value="")
-    @patch("codeflash.cli_cmds.cmd_auth.console")
+    @patch("codeflash.code_utils.shell_utils.save_api_key_to_rc")
+    @patch("codeflash.cli_cmds.oauth_handler.perform_oauth_signin")
+    @patch("codeflash.code_utils.env_utils.get_codeflash_api_key", return_value="")
+    @patch("codeflash.cli_cmds.console.console")
     def test_successful_oauth_saves_key(
         self,
         mock_console: MagicMock,
@@ -63,10 +63,10 @@ class TestAuthLogin:
         mock_console.print.assert_called_with("[green]Signed in successfully![/green]")
 
     @patch("codeflash.cli_cmds.cmd_auth.os")
-    @patch("codeflash.cli_cmds.cmd_auth.save_api_key_to_rc")
-    @patch("codeflash.cli_cmds.cmd_auth.perform_oauth_signin")
-    @patch("codeflash.cli_cmds.cmd_auth.get_codeflash_api_key", return_value="")
-    @patch("codeflash.cli_cmds.cmd_auth.console")
+    @patch("codeflash.code_utils.shell_utils.save_api_key_to_rc")
+    @patch("codeflash.cli_cmds.oauth_handler.perform_oauth_signin")
+    @patch("codeflash.code_utils.env_utils.get_codeflash_api_key", return_value="")
+    @patch("codeflash.cli_cmds.console.console")
     def test_windows_oauth_saves_key(
         self,
         mock_console: MagicMock,

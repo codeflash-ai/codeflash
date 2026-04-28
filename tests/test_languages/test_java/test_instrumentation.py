@@ -22,7 +22,6 @@ os.environ["CODEFLASH_API_KEY"] = "cf-test-key"
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
 from codeflash.languages.base import Language
 from codeflash.languages.current import set_current_language
-from codeflash.languages.java.maven_strategy import MavenStrategy
 from codeflash.languages.java.discovery import discover_functions_from_source
 from codeflash.languages.java.instrumentation import (
     _add_behavior_instrumentation,
@@ -34,6 +33,7 @@ from codeflash.languages.java.instrumentation import (
     instrument_generated_java_test,
     remove_instrumentation,
 )
+from codeflash.languages.java.maven_strategy import MavenStrategy
 
 
 class TestInstrumentForBehavior:
@@ -2177,7 +2177,7 @@ public class AccentTest {
 
 # Skip all E2E tests if Maven is not available
 requires_maven = pytest.mark.skipif(
-    MavenStrategy().find_executable(Path(".")) is None, reason="Maven not found - skipping execution tests"
+    MavenStrategy().find_executable(Path()) is None, reason="Maven not found - skipping execution tests"
 )
 
 
@@ -3485,3 +3485,444 @@ public class SpinWaitTest__perfonlyinstrumented {
             assert math.isclose(duration, 100_000_000, rel_tol=0.15), (
                 f"Long spin measured {duration}ns, expected ~100_000_000ns (15% tolerance)"
             )
+
+
+class TestVoidMethodInstrumentation:
+    """Tests for void method instrumentation — behavior mode captures receiver state."""
+
+    def test_behavior_mode_void_method_serializes_receiver(self, tmp_path: Path):
+        """Void method instrumentation should serialize the receiver, not a return value."""
+        source_file = (tmp_path / "Sorter.java").resolve()
+        source_file.write_text(
+            "public class Sorter {\n"
+            "    public void sort(int[] data) {\n"
+            "        java.util.Arrays.sort(data);\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "SorterTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class SorterTest {\n"
+            "    @Test\n"
+            "    public void testSort() {\n"
+            "        Sorter sorter = new Sorter();\n"
+            "        int[] data = {3, 1, 2};\n"
+            "        sorter.sort(data);\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="sort",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        assert result == (
+            "import org.junit.jupiter.api.Test;\n"
+            "import java.sql.Connection;\n"
+            "import java.sql.DriverManager;\n"
+            "import java.sql.PreparedStatement;\n"
+            "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
+            "public class SorterTest__perfinstrumented {\n"
+            "    @Test\n"
+            "    public void testSort() {\n"
+            "        // Codeflash behavior instrumentation\n"
+            '        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            "        int _cf_iter1 = 1;\n"
+            '        String _cf_mod1 = "SorterTest__perfinstrumented";\n'
+            '        String _cf_cls1 = "SorterTest__perfinstrumented";\n'
+            '        String _cf_fn1 = "sort";\n'
+            '        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");\n'
+            '        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");\n'
+            '        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";\n'
+            '        String _cf_test1 = "testSort";\n'
+            "        Sorter sorter = new Sorter();\n"
+            "        int[] data = {3, 1, 2};\n"
+            "        long _cf_end1_1 = -1;\n"
+            "        long _cf_start1_1 = 0;\n"
+            "        byte[] _cf_serializedResult1_1 = null;\n"
+            '        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L12_1" + "######$!");\n'
+            "        try {\n"
+            "            _cf_start1_1 = System.nanoTime();\n"
+            "            sorter.sort(data);\n"
+            "            _cf_end1_1 = System.nanoTime();\n"
+            "            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize(new Object[]{sorter, data});\n"
+            "        } finally {\n"
+            "            long _cf_end1_1_finally = System.nanoTime();\n"
+            "            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;\n"
+            '            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L12_1" + "######!");\n'
+            "            // Write to SQLite if output file is set\n"
+            "            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {\n"
+            "                try {\n"
+            '                    Class.forName("org.sqlite.JDBC");\n'
+            '                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {\n'
+            "                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {\n"
+            '                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +\n'
+            '                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +\n'
+            '                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +\n'
+            '                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");\n'
+            "                        }\n"
+            '                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";\n'
+            "                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {\n"
+            "                            _cf_pstmt1_1.setString(1, _cf_mod1);\n"
+            "                            _cf_pstmt1_1.setString(2, _cf_cls1);\n"
+            "                            _cf_pstmt1_1.setString(3, _cf_test1);\n"
+            "                            _cf_pstmt1_1.setString(4, _cf_fn1);\n"
+            "                            _cf_pstmt1_1.setInt(5, _cf_loop1);\n"
+            '                            _cf_pstmt1_1.setString(6, "L12_1");\n'
+            "                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);\n"
+            "                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);\n"
+            '                            _cf_pstmt1_1.setString(9, "void_state");\n'
+            "                            _cf_pstmt1_1.executeUpdate();\n"
+            "                        }\n"
+            "                    }\n"
+            "                } catch (Exception _cf_e1_1) {\n"
+            '                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());\n'
+            "                }\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+
+    def test_behavior_mode_void_method_implicit_this_receiver(self, tmp_path: Path):
+        """Void method with no explicit receiver uses 'this' for serialization."""
+        source_file = (tmp_path / "Container.java").resolve()
+        source_file.write_text(
+            "public class Container {\n"
+            "    public void clear() {\n"
+            "        // clears internal state\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "ContainerTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class ContainerTest {\n"
+            "    @Test\n"
+            "    public void testClear() {\n"
+            "        clear();\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="clear",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        assert result == (
+            "import org.junit.jupiter.api.Test;\n"
+            "import java.sql.Connection;\n"
+            "import java.sql.DriverManager;\n"
+            "import java.sql.PreparedStatement;\n"
+            "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
+            "public class ContainerTest__perfinstrumented {\n"
+            "    @Test\n"
+            "    public void testClear() {\n"
+            "        // Codeflash behavior instrumentation\n"
+            '        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            "        int _cf_iter1 = 1;\n"
+            '        String _cf_mod1 = "ContainerTest__perfinstrumented";\n'
+            '        String _cf_cls1 = "ContainerTest__perfinstrumented";\n'
+            '        String _cf_fn1 = "clear";\n'
+            '        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");\n'
+            '        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");\n'
+            '        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";\n'
+            '        String _cf_test1 = "testClear";\n'
+            "        long _cf_end1_1 = -1;\n"
+            "        long _cf_start1_1 = 0;\n"
+            "        byte[] _cf_serializedResult1_1 = null;\n"
+            '        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L10_1" + "######$!");\n'
+            "        try {\n"
+            "            _cf_start1_1 = System.nanoTime();\n"
+            "            clear();\n"
+            "            _cf_end1_1 = System.nanoTime();\n"
+            "            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize(new Object[]{this});\n"
+            "        } finally {\n"
+            "            long _cf_end1_1_finally = System.nanoTime();\n"
+            "            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;\n"
+            '            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L10_1" + "######!");\n'
+            "            // Write to SQLite if output file is set\n"
+            "            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {\n"
+            "                try {\n"
+            '                    Class.forName("org.sqlite.JDBC");\n'
+            '                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {\n'
+            "                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {\n"
+            '                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +\n'
+            '                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +\n'
+            '                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +\n'
+            '                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");\n'
+            "                        }\n"
+            '                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";\n'
+            "                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {\n"
+            "                            _cf_pstmt1_1.setString(1, _cf_mod1);\n"
+            "                            _cf_pstmt1_1.setString(2, _cf_cls1);\n"
+            "                            _cf_pstmt1_1.setString(3, _cf_test1);\n"
+            "                            _cf_pstmt1_1.setString(4, _cf_fn1);\n"
+            "                            _cf_pstmt1_1.setInt(5, _cf_loop1);\n"
+            '                            _cf_pstmt1_1.setString(6, "L10_1");\n'
+            "                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);\n"
+            "                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);\n"
+            '                            _cf_pstmt1_1.setString(9, "void_state");\n'
+            "                            _cf_pstmt1_1.executeUpdate();\n"
+            "                        }\n"
+            "                    }\n"
+            "                } catch (Exception _cf_e1_1) {\n"
+            '                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());\n'
+            "                }\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+
+    def test_behavior_mode_non_void_still_captures_result(self, tmp_path: Path):
+        """Non-void methods should still capture the return value (not the receiver)."""
+        source_file = (tmp_path / "Calculator.java").resolve()
+        source_file.write_text(
+            "public class Calculator {\n"
+            "    public int add(int a, int b) {\n"
+            "        return a + b;\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "CalculatorTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class CalculatorTest {\n"
+            "    @Test\n"
+            "    public void testAdd() {\n"
+            "        Calculator calc = new Calculator();\n"
+            "        assertEquals(4, calc.add(2, 2));\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="add",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="behavior", test_path=test_file
+        )
+
+        assert success is True
+        assert result == (
+            "import org.junit.jupiter.api.Test;\n"
+            "import java.sql.Connection;\n"
+            "import java.sql.DriverManager;\n"
+            "import java.sql.PreparedStatement;\n"
+            "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
+            "public class CalculatorTest__perfinstrumented {\n"
+            "    @Test\n"
+            "    public void testAdd() {\n"
+            "        // Codeflash behavior instrumentation\n"
+            '        int _cf_loop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            "        int _cf_iter1 = 1;\n"
+            '        String _cf_mod1 = "CalculatorTest__perfinstrumented";\n'
+            '        String _cf_cls1 = "CalculatorTest__perfinstrumented";\n'
+            '        String _cf_fn1 = "add";\n'
+            '        String _cf_outputFile1 = System.getenv("CODEFLASH_OUTPUT_FILE");\n'
+            '        String _cf_testIteration1 = System.getenv("CODEFLASH_TEST_ITERATION");\n'
+            '        if (_cf_testIteration1 == null) _cf_testIteration1 = "0";\n'
+            '        String _cf_test1 = "testAdd";\n'
+            "        Calculator calc = new Calculator();\n"
+            "        Object _cf_result1_1 = null;\n"
+            "        long _cf_end1_1 = -1;\n"
+            "        long _cf_start1_1 = 0;\n"
+            "        byte[] _cf_serializedResult1_1 = null;\n"
+            '        System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":L11_1" + "######$!");\n'
+            "        try {\n"
+            "            _cf_start1_1 = System.nanoTime();\n"
+            "            _cf_result1_1 = calc.add(2, 2);\n"
+            "            _cf_end1_1 = System.nanoTime();\n"
+            "            _cf_serializedResult1_1 = com.codeflash.Serializer.serialize((Object) _cf_result1_1);\n"
+            "        } finally {\n"
+            "            long _cf_end1_1_finally = System.nanoTime();\n"
+            "            long _cf_dur1_1 = (_cf_end1_1 != -1 ? _cf_end1_1 : _cf_end1_1_finally) - _cf_start1_1;\n"
+            '            System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loop1 + ":" + "L11_1" + "######!");\n'
+            "            // Write to SQLite if output file is set\n"
+            "            if (_cf_outputFile1 != null && !_cf_outputFile1.isEmpty()) {\n"
+            "                try {\n"
+            '                    Class.forName("org.sqlite.JDBC");\n'
+            '                    try (Connection _cf_conn1_1 = DriverManager.getConnection("jdbc:sqlite:" + _cf_outputFile1)) {\n'
+            "                        try (java.sql.Statement _cf_stmt1_1 = _cf_conn1_1.createStatement()) {\n"
+            '                            _cf_stmt1_1.execute("CREATE TABLE IF NOT EXISTS test_results (" +\n'
+            '                                "test_module_path TEXT, test_class_name TEXT, test_function_name TEXT, " +\n'
+            '                                "function_getting_tested TEXT, loop_index INTEGER, iteration_id TEXT, " +\n'
+            '                                "runtime INTEGER, return_value BLOB, verification_type TEXT)");\n'
+            "                        }\n"
+            '                        String _cf_sql1_1 = "INSERT INTO test_results VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";\n'
+            "                        try (PreparedStatement _cf_pstmt1_1 = _cf_conn1_1.prepareStatement(_cf_sql1_1)) {\n"
+            "                            _cf_pstmt1_1.setString(1, _cf_mod1);\n"
+            "                            _cf_pstmt1_1.setString(2, _cf_cls1);\n"
+            "                            _cf_pstmt1_1.setString(3, _cf_test1);\n"
+            "                            _cf_pstmt1_1.setString(4, _cf_fn1);\n"
+            "                            _cf_pstmt1_1.setInt(5, _cf_loop1);\n"
+            '                            _cf_pstmt1_1.setString(6, "L11_1");\n'
+            "                            _cf_pstmt1_1.setLong(7, _cf_dur1_1);\n"
+            "                            _cf_pstmt1_1.setBytes(8, _cf_serializedResult1_1);\n"
+            '                            _cf_pstmt1_1.setString(9, "function_call");\n'
+            "                            _cf_pstmt1_1.executeUpdate();\n"
+            "                        }\n"
+            "                    }\n"
+            "                } catch (Exception _cf_e1_1) {\n"
+            '                    System.err.println("CodeflashHelper: SQLite error: " + _cf_e1_1.getMessage());\n'
+            "                }\n"
+            "            }\n"
+            "        }\n"
+            "        assertEquals(4, (int)_cf_result1_1);\n"
+            "    }\n"
+            "}\n"
+        )
+
+    def test_void_discovery_with_require_return_false(self):
+        """Void methods should be discovered when require_return=False."""
+        from codeflash.languages.base import FunctionFilterCriteria
+        from codeflash.languages.java.discovery import discover_functions_from_source
+
+        source = (
+            "public class Example {\n"
+            "    public void doSomething() {\n"
+            '        System.out.println("hello");\n'
+            "    }\n"
+            "\n"
+            "    public int getValue() {\n"
+            "        return 42;\n"
+            "    }\n"
+            "}\n"
+        )
+
+        criteria_no_return = FunctionFilterCriteria(require_return=False)
+        functions = discover_functions_from_source(source, filter_criteria=criteria_no_return)
+        method_names = {f.function_name for f in functions}
+        assert "doSomething" in method_names
+        assert "getValue" in method_names
+
+        criteria_require_return = FunctionFilterCriteria(require_return=True)
+        functions = discover_functions_from_source(source, filter_criteria=criteria_require_return)
+        method_names = {f.function_name for f in functions}
+        assert "doSomething" not in method_names
+        assert "getValue" in method_names
+
+    def test_performance_mode_void_method_generates_valid_code(self, tmp_path: Path):
+        """Void methods in performance mode should generate valid timing code."""
+        source_file = (tmp_path / "Sorter.java").resolve()
+        source_file.write_text(
+            "public class Sorter {\n"
+            "    public void sort(int[] data) {\n"
+            "        java.util.Arrays.sort(data);\n"
+            "    }\n"
+            "}\n",
+            encoding="utf-8",
+        )
+
+        test_file = (tmp_path / "SorterTest.java").resolve()
+        test_source = (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            "public class SorterTest {\n"
+            "    @Test\n"
+            "    public void testSort() {\n"
+            "        Sorter sorter = new Sorter();\n"
+            "        int[] data = {3, 1, 2};\n"
+            "        sorter.sort(data);\n"
+            "    }\n"
+            "}\n"
+        )
+        test_file.write_text(test_source, encoding="utf-8")
+
+        func = FunctionToOptimize(
+            function_name="sort",
+            file_path=source_file,
+            starting_line=2,
+            ending_line=4,
+            parents=[],
+            is_method=True,
+            language="java",
+        )
+
+        success, result = instrument_existing_test(
+            test_string=test_source, function_to_optimize=func, mode="performance", test_path=test_file
+        )
+
+        assert success is True
+        assert result == (
+            "import org.junit.jupiter.api.Test;\n"
+            "\n"
+            '@SuppressWarnings("CheckReturnValue")\n'
+            "public class SorterTest__perfonlyinstrumented {\n"
+            "    @Test\n"
+            "    public void testSort() {\n"
+            "        // Codeflash timing instrumentation with inner loop for JIT warmup\n"
+            '        int _cf_outerLoop1 = Integer.parseInt(System.getenv("CODEFLASH_LOOP_INDEX"));\n'
+            '        int _cf_maxInnerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
+            '        int _cf_innerIterations1 = Integer.parseInt(System.getenv().getOrDefault("CODEFLASH_INNER_ITERATIONS", "10"));\n'
+            '        String _cf_mod1 = "SorterTest__perfonlyinstrumented";\n'
+            '        String _cf_cls1 = "SorterTest__perfonlyinstrumented";\n'
+            '        String _cf_test1 = "testSort";\n'
+            '        String _cf_fn1 = "sort";\n'
+            "        \n"
+            "        Sorter sorter = new Sorter();\n"
+            "        int[] data = {3, 1, 2};\n"
+            "        for (int _cf_i1 = 0; _cf_i1 < _cf_innerIterations1; _cf_i1++) {\n"
+            "            int _cf_loopId1 = _cf_outerLoop1 * _cf_maxInnerIterations1 + _cf_i1;\n"
+            '            System.out.println("!$######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + "######$!");\n'
+            "            long _cf_end1 = -1;\n"
+            "            long _cf_start1 = 0;\n"
+            "            try {\n"
+            "                _cf_start1 = System.nanoTime();\n"
+            "                sorter.sort(data);\n"
+            "                _cf_end1 = System.nanoTime();\n"
+            "            } finally {\n"
+            "                long _cf_end1_finally = System.nanoTime();\n"
+            "                long _cf_dur1 = (_cf_end1 != -1 ? _cf_end1 : _cf_end1_finally) - _cf_start1;\n"
+            '                System.out.println("!######" + _cf_mod1 + ":" + _cf_cls1 + "." + _cf_test1 + ":" + _cf_fn1 + ":" + _cf_loopId1 + ":" + "L9_1" + ":" + _cf_dur1 + "######!");\n'
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )

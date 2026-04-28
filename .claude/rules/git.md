@@ -1,19 +1,35 @@
-# Git Commits & Pull Requests
+# Git
 
 ## Commits
+
 - Never commit, amend, or push without explicit permission
-- Don't commit intermediate states — wait until the full implementation is complete, reviewed, and explicitly approved before committing. If the user corrects direction mid-implementation, incorporate the correction before any commit
-- Always create a new branch from `main` before starting any new work — never commit directly to `main` or reuse an existing feature branch for unrelated changes
-- Use conventional commit format: `fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`
-- Keep commits atomic - one logical change per commit
-- Commit message body should be concise (1-2 sentences max)
-- Merge for simple syncs, rebase when branches have diverged significantly
-- When committing to an external/third-party repo, follow that repo's own conventions for versioning, changelog, and CI
-- Pre-commit: Run `uv run prek` before committing — fix any issues before creating the commit
-- Pre-push: Run `uv run prek run --from-ref origin/<base>` to check all changed files against the PR base — this matches CI behavior and catches issues that per-commit prek misses. To detect the base branch: `gh pr view --json baseRefName -q .baseRefName 2>/dev/null || echo main`
+- Don't commit intermediate states — wait until the full implementation is complete and approved
+- Always create a new branch from `main` — never commit directly to `main`
+- Conventional format: `fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`
+- First line: imperative verb + what changed, under 72 characters
+- Body for *why*, not *what* — the diff shows what changed
+- One purpose per commit: a bug fix, a new function, a refactor — not all three
+- A commit that adds a function also adds its tests and exports — that's one logical change
+
+## Sizing
+
+- Too small: renaming a variable in one commit, updating its references in another
+- Right size: adding a function with its tests, `__init__` export, and usage update
+- Too large: implementing an entire subsystem in one commit
+
+## Pre-commit / Pre-push
+
+- Pre-commit: Run `uv run prek` before committing
+- Pre-push: Run `uv run prek run --from-ref origin/<base>` to check all changed files against the PR base
 
 ## Pull Requests
-- PR titles should use conventional format
-- Keep the PR body short and straight to the point
+
+- PR titles use conventional format
+- Keep the PR body short and to the point
 - If related to a Linear issue, include `CF-#` in the body
-- Branch naming: `cf-#-title` (lowercase, hyphenated), no other prefixes/suffixes
+- Branch naming: `cf-#-title` (lowercase, hyphenated)
+
+## Branch Hygiene
+
+- Delete feature branches locally after merging (`git branch -d <branch>`)
+- Use `/clean_gone` to prune local branches whose remote tracking branch has been deleted

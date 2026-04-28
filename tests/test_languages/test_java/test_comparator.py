@@ -1,17 +1,22 @@
 """Tests for Java test result comparison."""
 
-import shutil
 import sqlite3
 from pathlib import Path
 
 import pytest
 
-from codeflash.languages.java.comparator import compare_invocations_directly, compare_test_results, values_equal
+from codeflash.languages.java.comparator import (
+    _find_comparator_jar,
+    compare_invocations_directly,
+    compare_test_results,
+    values_equal,
+)
 from codeflash.models.models import TestDiffScope
 
-# Skip tests that require Java runtime if Java is not available
-requires_java = pytest.mark.skipif(
-    shutil.which("java") is None, reason="Java not found - skipping Comparator integration tests"
+# Skip tests that require the codeflash-runtime JAR (built by Maven from codeflash-java-runtime/)
+requires_java_runtime = pytest.mark.skipif(
+    _find_comparator_jar() is None,
+    reason="codeflash-runtime JAR not found - skipping Comparator integration tests",
 )
 
 # Kryo-serialized bytes for common test values.
@@ -445,7 +450,7 @@ class TestEdgeCases:
         assert equivalent is True
 
 
-@requires_java
+@requires_java_runtime
 class TestTestResultsTableSchema:
     """Tests for Java Comparator reading from test_results table schema.
 
@@ -920,7 +925,7 @@ class TestComparatorErrorHandling:
         assert diffs[0].scope == TestDiffScope.DID_PASS
 
 
-@requires_java
+@requires_java_runtime
 class TestComparatorJavaEdgeCases(TestTestResultsTableSchema):
     """Tests for Java Comparator edge cases that require Java runtime.
 

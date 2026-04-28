@@ -590,7 +590,7 @@ class JavaSupport(LanguageSupport):
         )
 
     def instrument_source_for_line_profiler(
-        self, func_info: FunctionToOptimize, line_profiler_output_file: Path
+        self, func_info: FunctionToOptimize, line_profiler_output_file: Path, project_classpath: str | None = None
     ) -> bool:
         """Prepare line profiling via the bytecode-instrumentation agent.
 
@@ -602,6 +602,7 @@ class JavaSupport(LanguageSupport):
         Args:
             func_info: Function to profile.
             line_profiler_output_file: Path where profiling results will be written by the agent.
+            project_classpath: Resolved classpath from the build tool, used to locate the agent JAR.
 
         Returns:
             True if preparation succeeded, False otherwise.
@@ -619,7 +620,7 @@ class JavaSupport(LanguageSupport):
                 source=source, file_path=func_info.file_path, functions=[func_info], config_output_path=config_path
             )
 
-            self.line_profiler_agent_arg = profiler.build_javaagent_arg(config_path)
+            self.line_profiler_agent_arg = profiler.build_javaagent_arg(config_path, classpath=project_classpath)
             self.line_profiler_warmup_iterations = profiler.warmup_iterations
             return True
         except Exception:

@@ -20,6 +20,7 @@ from rich.syntax import Syntax
 from rich.text import Text
 from rich.tree import Tree
 
+import codeflash.code_utils._libcst_cache  # noqa: F401
 from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
@@ -488,6 +489,7 @@ class FunctionOptimizer:
             else function_to_optimize.file_path.read_text(encoding="utf8")
         )
         self.language_support = current_language_support()
+        self.language_support.ensure_runtime_environment(self.project_root)
         if not function_to_optimize_ast:
             self.function_to_optimize_ast = self._resolve_function_ast(
                 self.function_to_optimize_source_code, function_to_optimize.function_name, function_to_optimize.parents
@@ -3252,6 +3254,11 @@ class FunctionOptimizer:
         test_env["CODEFLASH_TEST_ITERATION"] = str(codeflash_test_iteration)
         test_env["CODEFLASH_TRACER_DISABLE"] = str(codeflash_tracer_disable)
         test_env["CODEFLASH_LOOP_INDEX"] = str(codeflash_loop_index)
+        # Pin PYTHONHASHSEED so original and candidate test processes use the same hash seed.
+        # Without this, each subprocess gets a random seed, which can cause non-deterministic
+        # iteration order in sets/dicts and lead to flaky return-value comparisons.
+        if "PYTHONHASHSEED" not in test_env:
+            test_env["PYTHONHASHSEED"] = "0"
         return test_env
 
     def line_profiler_step(

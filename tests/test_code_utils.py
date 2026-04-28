@@ -8,6 +8,7 @@ import pytest
 
 from codeflash.code_utils.code_utils import (
     cleanup_paths,
+    exit_with_message,
     file_name_from_test_module_name,
     file_path_from_module_name,
     get_all_function_names,
@@ -751,3 +752,33 @@ class MyClass:
 """
     result = validate_python_code(code)
     assert result == code
+
+
+class TestExitWithMessageSubagent:
+    @patch("codeflash.code_utils.code_utils.is_subagent_mode", return_value=True)
+    def test_outputs_structured_xml_in_subagent_mode(self, _mock_subagent: MagicMock, capsys: pytest.CaptureFixture[str]) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            exit_with_message("Something went wrong", error_on_exit=True)
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "<codeflash-error>" in captured.out
+        assert "Something went wrong" in captured.out
+        assert "</codeflash-error>" in captured.out
+
+    @patch("codeflash.code_utils.code_utils.is_subagent_mode", return_value=True)
+    def test_escapes_xml_special_chars(self, _mock_subagent: MagicMock, capsys: pytest.CaptureFixture[str]) -> None:
+        with pytest.raises(SystemExit):
+            exit_with_message('File <foo> & "bar" not found', error_on_exit=True)
+        captured = capsys.readouterr()
+        assert "&lt;foo&gt;" in captured.out
+        assert "&amp;" in captured.out
+
+    @patch("codeflash.code_utils.code_utils.is_subagent_mode", return_value=False)
+    @patch("codeflash.code_utils.code_utils.is_LSP_enabled", return_value=False)
+    def test_no_xml_when_not_subagent(
+        self, _mock_lsp: MagicMock, _mock_subagent: MagicMock, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        with pytest.raises(SystemExit):
+            exit_with_message("Normal error", error_on_exit=True)
+        captured = capsys.readouterr()
+        assert "<codeflash-error>" not in captured.out

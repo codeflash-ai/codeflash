@@ -3,7 +3,10 @@ name: CodeFlash
 on:
   pull_request:
     paths:
-      - '**'  # Trigger for all paths
+      - 'codeflash/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
 
   workflow_dispatch:
 
@@ -23,14 +26,15 @@ jobs:
       COLUMNS: 110
     steps:
       - name: 🛎️ Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: 🐍 Set up Python 3.11 for CLI
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: 3.11.6
+          enable-cache: true
 
       - name: 📦 Install dependencies (CLI)
         run: |
@@ -39,4 +43,4 @@ jobs:
       - name: ⚡️Codeflash Optimization
         id: optimize_code
         run: |
-          uv run codeflash --benchmark --testgen-review
+          uv run codeflash --benchmark --testgen-review --no-pr

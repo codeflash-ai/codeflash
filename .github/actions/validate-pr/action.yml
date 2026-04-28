@@ -1,0 +1,35 @@
+name: Validate PR
+description: Ensure only authorized users can modify workflow files in PRs
+inputs:
+  base_sha:
+    description: Base commit SHA of the pull request
+    required: true
+  head_sha:
+    description: Head commit SHA of the pull request
+    required: true
+  author:
+    description: Login of the PR author
+    required: true
+  pr_state:
+    description: State of the pull request (open/closed)
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Check workflow file changes
+      shell: bash
+      run: |
+        if git diff --name-only "${{ inputs.base_sha }}" "${{ inputs.head_sha }}" | grep -q "^.github/workflows/"; then
+          echo "Workflow changes detected."
+          AUTHOR="${{ inputs.author }}"
+          if [[ "$AUTHOR" == "misrasaurabh1" || "$AUTHOR" == "KRRT7" ]]; then
+            echo "Authorized user ($AUTHOR). Proceeding."
+          elif [[ "${{ inputs.pr_state }}" == "open" ]]; then
+            echo "PR is open. Protection rules in place. Proceeding."
+          else
+            echo "Unauthorized user ($AUTHOR). Exiting."
+            exit 1
+          fi
+        else
+          echo "No workflow file changes. Proceeding."
+        fi
