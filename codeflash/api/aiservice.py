@@ -49,7 +49,7 @@ class AiServiceClient:
         self.is_local = self.base_url == "http://localhost:8000"
         # (connect_timeout, read_timeout) — connect should be fast; read
         # can be slow because the server runs LLM inference.
-        self.timeout: float | tuple[float, float] | None = (10, 600)
+        self.timeout: float | tuple[float, float] | None = (10, 300)
 
     def get_next_sequence(self) -> int:
         """Get the next LLM call sequence number."""

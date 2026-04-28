@@ -124,6 +124,7 @@ def process_pyproject_config(args: Namespace) -> Namespace:
 
     if args.tests_root is None:
         if is_go_project:
+            # this is just a placeholder, in go we put generated test files in the same package as the source
             args.tests_root = args.module_root
         elif is_java_project:
             # Try standard Maven/Gradle test directories
