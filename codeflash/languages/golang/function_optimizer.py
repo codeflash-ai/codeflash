@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 class GoFunctionOptimizer(FunctionOptimizer):
     def get_code_optimization_context(self) -> Result[CodeOptimizationContext, str]:
         from codeflash.languages import get_language_support
-        from codeflash.languages.base import Language
+        from codeflash.languages.language_enum import Language
 
         language = Language(self.function_to_optimize.language)
         lang_support = get_language_support(language)

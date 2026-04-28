@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults
 
@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from codeflash.models.models import TestFiles
+    from codeflash.models.test_type import TestType
     from codeflash.verification.verification_utils import TestConfig
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ def parse_go_test_output(
     test_json_path: Path,
     test_files: TestFiles,
     test_config: TestConfig,
-    run_result: subprocess.CompletedProcess | None = None,
+    run_result: subprocess.CompletedProcess[str] | None = None,
 ) -> TestResults:
     test_results = TestResults()
 
@@ -71,10 +72,11 @@ def parse_go_test_output(
             active[test_name] = _TestIteration(test_name=test_name, package=package)
             continue
 
-        it = active.get(test_name)
-        if it is None:
-            it = _TestIteration(test_name=test_name, package=package)
-            active[test_name] = it
+        maybe_it = active.get(test_name)
+        if maybe_it is None:
+            maybe_it = _TestIteration(test_name=test_name, package=package)
+            active[test_name] = maybe_it
+        it = maybe_it
 
         if action == "output":
             output_text = event.get("Output", "")
@@ -109,9 +111,6 @@ def parse_go_test_output(
 
         test_file_path = _resolve_test_file(it.test_name, it.package, test_files, base_dir)
         test_type = _resolve_test_type(test_file_path, test_files)
-        if test_type is None:
-            logger.debug("Skipping test %s: could not resolve test type", it.test_name)
-            continue
 
         test_results.add(
             FunctionTestInvocation(
@@ -157,7 +156,7 @@ class _TestIteration:
         self.stdout: str = ""
 
 
-def _read_json_output(path: Path, run_result: subprocess.CompletedProcess | None) -> str:
+def _read_json_output(path: Path, run_result: subprocess.CompletedProcess[str] | None) -> str:
     try:
         content = path.read_text(encoding="utf-8")
         if content.strip():
@@ -165,15 +164,12 @@ def _read_json_output(path: Path, run_result: subprocess.CompletedProcess | None
     except Exception:
         pass
     if run_result is not None:
-        stdout = run_result.stdout
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode("utf-8", errors="replace")
-        return stdout or ""
+        return run_result.stdout or ""
     return ""
 
 
-def _parse_json_lines(content: str) -> list[dict]:
-    events: list[dict] = []
+def _parse_json_lines(content: str) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
     for line in content.splitlines():
         line = line.strip()
         if not line:
@@ -199,7 +195,7 @@ def _resolve_test_file(test_name: str, package: str, test_files: TestFiles, base
     return base_dir / f"{test_name}.go"
 
 
-def _resolve_test_type(test_file_path: Path, test_files: TestFiles):
+def _resolve_test_type(test_file_path: Path, test_files: TestFiles) -> TestType:
     from codeflash.models.test_type import TestType
 
     test_type = test_files.get_test_type_by_instrumented_file_path(test_file_path)

@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from codeflash.languages.base import LanguageSupport
 from codeflash.languages.golang.comparator import compare_test_results as _compare_results
 from codeflash.languages.golang.config import detect_go_project, detect_go_version
 from codeflash.languages.golang.context import extract_code_context as _extract_context
@@ -29,18 +30,17 @@ if TYPE_CHECKING:
         DependencyResolver,
         FunctionFilterCriteria,
         HelperFunction,
-        InvocationId,
         ReferenceInfo,
         TestInfo,
     )
     from codeflash.models.function_types import FunctionToOptimize
-    from codeflash.models.models import GeneratedTestsList
+    from codeflash.models.models import GeneratedTestsList, InvocationId
 
 logger = logging.getLogger(__name__)
 
 
 @register_language
-class GoSupport:
+class GoSupport(LanguageSupport):
     def __init__(self) -> None:
         self._analyzer = GoAnalyzer()
         self._go_version: str | None = None

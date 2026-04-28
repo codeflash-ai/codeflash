@@ -6,7 +6,10 @@ from typing import TYPE_CHECKING
 from codeflash.languages.golang.parser import GoAnalyzer
 
 if TYPE_CHECKING:
+    import tree_sitter
+
     from codeflash.discovery.functions_to_optimize import FunctionToOptimize
+    from codeflash.languages.golang.parser import GoGlobalDeclaration
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +105,7 @@ def _merge_global_var_const(optimized_code: str, original_source: str, analyzer:
         return original_source
 
     orig_decls = analyzer.find_global_declarations(original_source)
-    orig_names_to_decl: dict[str, object] = {}
+    orig_names_to_decl: dict[str, GoGlobalDeclaration] = {}
     for decl in orig_decls:
         for name in decl.names:
             orig_names_to_decl[name] = decl
@@ -131,7 +134,7 @@ def _merge_global_var_const(optimized_code: str, original_source: str, analyzer:
     return original_source
 
 
-def _replace_declaration_block(source: str, orig_decl: object, new_source_code: str) -> str:
+def _replace_declaration_block(source: str, orig_decl: GoGlobalDeclaration, new_source_code: str) -> str:
     lines = source.splitlines(keepends=True)
     start = orig_decl.starting_line - 1
     end = orig_decl.ending_line
@@ -186,19 +189,19 @@ def remove_test_functions(test_source: str, functions_to_remove: list[str], anal
     return "".join(lines)
 
 
-def _find_doc_comment_start(node: object) -> int | None:
-    prev = getattr(node, "prev_named_sibling", None)
+def _find_doc_comment_start(node: tree_sitter.Node) -> int | None:
+    prev = node.prev_named_sibling
     if prev is None:
         return None
-    if getattr(prev, "type", None) != "comment":
+    if prev.type != "comment":
         return None
     if prev.end_point.row + 1 != node.start_point.row:
         return None
-    comment_start = prev.start_point.row + 1
+    comment_start: int = prev.start_point.row + 1
     current = prev
     while True:
-        earlier = getattr(current, "prev_named_sibling", None)
-        if earlier is None or getattr(earlier, "type", None) != "comment":
+        earlier = current.prev_named_sibling
+        if earlier is None or earlier.type != "comment":
             break
         if earlier.end_point.row + 1 != current.start_point.row:
             break

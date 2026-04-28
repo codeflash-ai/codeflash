@@ -3,8 +3,9 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from codeflash.languages.base import CodeContext, HelperFunction, Language
+from codeflash.languages.base import CodeContext, HelperFunction
 from codeflash.languages.golang.parser import GoAnalyzer
+from codeflash.languages.language_enum import Language
 
 if TYPE_CHECKING:
     from pathlib import Path
