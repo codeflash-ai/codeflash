@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-tomlkit",
+  "version": "0.13.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/tomlkit@0.13.3",
+  "summary": "Style preserving TOML library for Python that maintains formatting while providing an intuitive API."
+}

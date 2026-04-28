@@ -87,8 +87,14 @@ def run_compare(args: Namespace) -> None:
     benchmarks_root_str = pyproject_config.get("benchmarks_root")
 
     if not benchmarks_root_str:
-        logger.error("benchmarks-root must be configured in [tool.codeflash] to use compare")
-        sys.exit(1)
+        # Auto-discover .codeflash/benchmarks/ if it exists
+        candidate = project_root / ".codeflash" / "benchmarks"
+        if candidate.is_dir():
+            benchmarks_root_str = str(candidate)
+            logger.info(f"Auto-discovered benchmarks at {candidate}")
+        else:
+            logger.error("benchmarks-root must be configured in [tool.codeflash] or .codeflash/benchmarks/ must exist")
+            sys.exit(1)
 
     benchmarks_root = Path(benchmarks_root_str).resolve()
     if not benchmarks_root.is_dir():
