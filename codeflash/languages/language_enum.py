@@ -13,6 +13,7 @@ class Language(str, Enum):
     JAVASCRIPT = "javascript"
     TYPESCRIPT = "typescript"
     JAVA = "java"
+    GO = "go"
 
     def __str__(self) -> str:
         return self.value

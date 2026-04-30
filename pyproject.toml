@@ -27,6 +27,7 @@ dependencies = [
     "tree-sitter-typescript>=0.23.2",
     "tree-sitter-java>=0.23.5",
     "tree-sitter-groovy>=0.1.2",
+    "tree-sitter-go>=0.23.0",
     "tree-sitter-kotlin>=1.1.0",
     "pytest-timeout>=2.4.0",
     "tomlkit>=0.14.0",
