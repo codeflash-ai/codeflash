@@ -429,3 +429,4 @@ code_to_optimize/**/package-lock.json
 
 # Other tools
 .codeflash/
+.codeflash_eval_worktrees/
