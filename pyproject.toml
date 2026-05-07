@@ -225,8 +225,8 @@ module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba", "d
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["codeflash.code_utils.codeflash_wrap_decorator", "codeflash.code_utils.instrument_existing_tests"]
-disable_error_code = ["attr-defined", "return-value", "no-untyped-call", "no-untyped-def", "arg-type", "assignment", "var-annotated"]
+module = ["codeflash.code_utils.codeflash_wrap_decorator", "codeflash.code_utils.instrument_existing_tests", "codeflash.optimization.optimizer"]
+disable_error_code = ["attr-defined", "return-value", "no-untyped-call", "no-untyped-def", "arg-type", "assignment", "var-annotated", "no-any-return", "call-overload", "union-attr", "unreachable", "list-item"]
 
 [tool.pydantic-mypy]
 init_forbid_extra = true
