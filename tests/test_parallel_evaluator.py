@@ -354,3 +354,53 @@ class TestParallelCandidateEvaluator:
         assert benchmark_call_count == 3
         for _, result in results:
             assert is_successful(result)
+
+    def test_more_candidates_than_slots_no_deadlock(self, tmp_path: Path) -> None:
+        """Regression test: more passing candidates than pool slots must not deadlock."""
+        from codeflash.optimization.parallel_evaluator import _BehavioralPass
+
+        opt = self._make_optimizer_mock(tmp_path)
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "module.py").write_text("def f(): pass", encoding="utf-8")
+
+        nodes = [self._make_candidate_node(f"cand_{i}") for i in range(6)]
+        evaluator = ParallelCandidateEvaluator(opt, pool_size=2)
+
+        repo_root = Path(__file__).resolve().parents[1]
+        mock_result = MagicMock()
+        mock_result.best_test_runtime = 2000
+        mock_behavior_results = MagicMock()
+
+        async def mock_behavioral(self_eval: object, *args: object, **kwargs: object) -> Success:  # type: ignore[type-arg]
+            return Success(
+                _BehavioralPass(
+                    candidate_index=0,
+                    perf_test_files=[],
+                    test_env={},
+                    pytest_cmd_list=[],
+                    behavior_test_results=mock_behavior_results,
+                )
+            )
+
+        async def mock_benchmark(self_eval: object, *args: object, **kwargs: object) -> Success:  # type: ignore[type-arg]
+            return Success(mock_result)
+
+        async def _run() -> list:  # type: ignore[type-arg]
+            with (
+                patch("codeflash.code_utils.worktree_pool.git_root_dir", return_value=repo_root),
+                patch.object(ParallelCandidateEvaluator, "_run_behavioral", mock_behavioral),
+                patch.object(ParallelCandidateEvaluator, "_benchmark_phase", mock_benchmark),
+            ):
+                return await evaluator.evaluate_candidates(
+                    candidates=[(n, i, None) for i, n in enumerate(nodes)],
+                    code_context=MagicMock(),
+                    original_code_baseline=MagicMock(),
+                    original_helper_code={},
+                    file_path_to_helper_classes={},
+                )
+
+        # If this deadlocks, the test will timeout
+        results = anyio.run(_run)
+        assert len(results) == 6
+        for _, result in results:
+            assert is_successful(result)
