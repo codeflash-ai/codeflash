@@ -501,6 +501,13 @@ def _build_parser() -> ArgumentParser:
     parser.add_argument("--no-draft", default=False, action="store_true", help="Skip optimization for draft PRs")
     parser.add_argument("--worktree", default=False, action="store_true", help="Use worktree for optimization")
     parser.add_argument(
+        "--parallel-candidates",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Evaluate up to N optimization candidates in parallel using git worktrees (0 = sequential)",
+    )
+    parser.add_argument(
         "--testgen-review", default=False, action="store_true", help="Enable AI review and repair of generated tests"
     )
     parser.add_argument(

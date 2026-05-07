@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 from codeflash.cli_cmds.console import logger
 from codeflash.code_utils.code_utils import custom_addopts
-from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
 from codeflash.languages.registry import get_language_support
 
 # Pattern to extract timing from stdout markers: !######...:<duration_ns>######!
@@ -92,11 +91,35 @@ def _ensure_runtime_files(project_root: Path, language: str = "javascript") -> N
 
 def execute_test_subprocess(
     cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
-) -> subprocess.CompletedProcess:
+) -> subprocess.CompletedProcess[str]:
     """Execute a subprocess with the given command list, working directory, environment variables, and timeout."""
     logger.debug(f"executing test run with command: {' '.join(cmd_list)}")
     with custom_addopts():
-        run_args = get_cross_platform_subprocess_run_args(
-            cwd=cwd, env=env, timeout=timeout, check=False, text=True, capture_output=True
-        )
-        return subprocess.run(cmd_list, **run_args)  # noqa: PLW1510
+        return subprocess.run(cmd_list, cwd=cwd, env=env, timeout=timeout, check=False, text=True, capture_output=True)
+
+
+async def async_execute_test_subprocess(
+    cmd_list: list[str], cwd: Path, env: dict[str, str] | None, timeout: int = 600
+) -> subprocess.CompletedProcess[str]:
+    """Execute a test subprocess asynchronously using anyio."""
+    import os as _os
+
+    import anyio
+
+    logger.debug(f"async executing test run with command: {' '.join(cmd_list)}")
+
+    merged_env = _os.environ.copy()
+    if env:
+        merged_env.update(env)
+
+    with custom_addopts():
+        try:
+            with anyio.fail_after(timeout):
+                result = await anyio.run_process(cmd_list, cwd=cwd, env=merged_env, check=False)
+        except TimeoutError as e:
+            raise subprocess.TimeoutExpired(cmd_list, timeout) from e
+
+    stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+    stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+
+    return subprocess.CompletedProcess(args=cmd_list, returncode=result.returncode, stdout=stdout, stderr=stderr)

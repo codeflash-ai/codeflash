@@ -32,6 +32,7 @@ dependencies = [
     "tomlkit>=0.14.0",
     "attrs>=26.1.0",
     "requests>=2.32.5",
+    "anyio>=4.4.0",
     "junitparser>=4.0.2",
     "pydantic>=2.13.3",
     "humanize>=4.13.0",
