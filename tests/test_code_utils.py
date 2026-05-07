@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from codeflash.code_utils.code_utils import (
+    _get_site_packages_paths,
     cleanup_paths,
     exit_with_message,
     file_name_from_test_module_name,
@@ -261,32 +262,39 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
 
 
 def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    _get_site_packages_paths.cache_clear()
     site_packages = [Path("/usr/local/lib/python3.9/site-packages").resolve()]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
     assert path_belongs_to_site_packages(file_path) is True
+    _get_site_packages_paths.cache_clear()
 
 
 def test_path_belongs_to_site_packages_with_non_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    _get_site_packages_paths.cache_clear()
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("/usr/local/lib/python3.9/other_directory/some_package")
     assert path_belongs_to_site_packages(file_path) is False
+    _get_site_packages_paths.cache_clear()
 
 
 def test_path_belongs_to_site_packages_with_relative_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    _get_site_packages_paths.cache_clear()
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
 
     file_path = Path("some_package")
     assert path_belongs_to_site_packages(file_path) is False
+    _get_site_packages_paths.cache_clear()
 
 
 def test_path_belongs_to_site_packages_with_symlinked_site_packages(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    _get_site_packages_paths.cache_clear()
     real_site_packages = tmp_path / "real_site_packages"
     real_site_packages.mkdir()
 
@@ -303,9 +311,11 @@ def test_path_belongs_to_site_packages_with_symlinked_site_packages(
 
     symlinked_package_file = symlinked_site_packages / "some_package" / "__init__.py"
     assert path_belongs_to_site_packages(symlinked_package_file) is True
+    _get_site_packages_paths.cache_clear()
 
 
 def test_path_belongs_to_site_packages_with_complex_symlinks(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _get_site_packages_paths.cache_clear()
     real_site_packages = tmp_path / "real" / "lib" / "python3.9" / "site-packages"
     real_site_packages.mkdir(parents=True)
 
@@ -326,11 +336,13 @@ def test_path_belongs_to_site_packages_with_complex_symlinks(monkeypatch: pytest
 
     file_via_links = site_packages_via_links / "test_package" / "module.py"
     assert path_belongs_to_site_packages(file_via_links) is True
+    _get_site_packages_paths.cache_clear()
 
 
 def test_path_belongs_to_site_packages_resolved_paths_normalization(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    _get_site_packages_paths.cache_clear()
     site_packages_dir = tmp_path / "lib" / "python3.9" / "site-packages"
     site_packages_dir.mkdir(parents=True)
 
@@ -346,6 +358,7 @@ def test_path_belongs_to_site_packages_resolved_paths_normalization(
 
     complex_file_path = tmp_path / "lib" / "python3.9" / "site-packages" / "other" / ".." / "mypackage" / "module.py"
     assert path_belongs_to_site_packages(complex_file_path) is True
+    _get_site_packages_paths.cache_clear()
 
 
 # tests for is_class_defined_in_file
@@ -380,7 +393,7 @@ def my_function():
 
 
 @pytest.fixture
-def mock_code_context():
+def mock_code_context() -> MagicMock:
     """Mock CodeOptimizationContext for testing extract_dependent_function."""
     from unittest.mock import MagicMock
 
@@ -391,7 +404,7 @@ def mock_code_context():
     return context
 
 
-def test_extract_dependent_function_sync_and_async(mock_code_context):
+def test_extract_dependent_function_sync_and_async(mock_code_context: MagicMock) -> None:
     """Test extract_dependent_function with both sync and async functions."""
     # Test sync function extraction
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
@@ -417,7 +430,7 @@ async def async_helper_function():
     assert extract_dependent_function("main_function", mock_code_context) == "async_helper_function"
 
 
-def test_extract_dependent_function_edge_cases(mock_code_context):
+def test_extract_dependent_function_edge_cases(mock_code_context: MagicMock) -> None:
     """Test extract_dependent_function edge cases."""
     # No dependent functions
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
@@ -441,7 +454,7 @@ async def helper2():
     assert extract_dependent_function("main_function", mock_code_context) is False
 
 
-def test_extract_dependent_function_mixed_scenarios(mock_code_context):
+def test_extract_dependent_function_mixed_scenarios(mock_code_context: MagicMock) -> None:
     """Test extract_dependent_function with mixed sync/async scenarios."""
     # Async main with sync helper
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
@@ -782,3 +795,62 @@ class TestExitWithMessageSubagent:
             exit_with_message("Normal error", error_on_exit=True)
         captured = capsys.readouterr()
         assert "<codeflash-error>" not in captured.out
+
+
+def test_path_belongs_to_site_packages_true(tmp_path: Path) -> None:
+    _get_site_packages_paths.cache_clear()
+    site_packages_dir = (tmp_path / "lib" / "python3.9" / "site-packages").resolve()
+    site_packages_dir.mkdir(parents=True)
+    package_file = (site_packages_dir / "some_package" / "module.py")
+    package_file.parent.mkdir()
+    package_file.write_text("# module", encoding="utf-8")
+
+    with patch("codeflash.code_utils.code_utils.site.getsitepackages", return_value=[str(site_packages_dir)]):
+        _get_site_packages_paths.cache_clear()
+        assert path_belongs_to_site_packages(package_file.resolve()) is True
+    _get_site_packages_paths.cache_clear()
+
+
+def test_path_belongs_to_site_packages_false(tmp_path: Path) -> None:
+    _get_site_packages_paths.cache_clear()
+    site_packages_dir = (tmp_path / "lib" / "python3.9" / "site-packages").resolve()
+    site_packages_dir.mkdir(parents=True)
+    other_dir = (tmp_path / "other" / "location").resolve()
+    other_dir.mkdir(parents=True)
+    other_file = other_dir / "module.py"
+    other_file.write_text("# module", encoding="utf-8")
+
+    with patch("codeflash.code_utils.code_utils.site.getsitepackages", return_value=[str(site_packages_dir)]):
+        _get_site_packages_paths.cache_clear()
+        assert path_belongs_to_site_packages(other_file.resolve()) is False
+    _get_site_packages_paths.cache_clear()
+
+
+def test_get_site_packages_paths_is_cached() -> None:
+    _get_site_packages_paths.cache_clear()
+    with patch("codeflash.code_utils.code_utils.site.getsitepackages", return_value=["/fake/site-packages"]) as mock_gsp:
+        result1 = _get_site_packages_paths()
+        result2 = _get_site_packages_paths()
+        assert result1 == result2
+        mock_gsp.assert_called_once()
+    _get_site_packages_paths.cache_clear()
+
+
+def test_path_belongs_to_site_packages_with_symlink(tmp_path: Path) -> None:
+    _get_site_packages_paths.cache_clear()
+    real_site_packages = (tmp_path / "real_site_packages").resolve()
+    real_site_packages.mkdir()
+    package_file = real_site_packages / "pkg" / "mod.py"
+    package_file.parent.mkdir()
+    package_file.write_text("# mod", encoding="utf-8")
+
+    symlink_dir = tmp_path / "linked_site_packages"
+    symlink_dir.symlink_to(real_site_packages)
+
+    with patch(
+        "codeflash.code_utils.code_utils.site.getsitepackages", return_value=[str(real_site_packages)]
+    ):
+        _get_site_packages_paths.cache_clear()
+        symlinked_file = symlink_dir / "pkg" / "mod.py"
+        assert path_belongs_to_site_packages(symlinked_file) is True
+    _get_site_packages_paths.cache_clear()
