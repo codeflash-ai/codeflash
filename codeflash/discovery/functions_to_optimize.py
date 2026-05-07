@@ -262,13 +262,13 @@ def get_functions_to_optimize(
             console.rule()
             file = Path(file) if isinstance(file, str) else file
             functions = find_all_functions_in_file(file)
-            # Pre-read JS/TS file content once to avoid redundant disk reads in export checks
+            # Source already cached by find_all_functions_in_file above
             _js_ts_source: str | None = None
             if only_get_this_function is not None and is_language_supported(file):
                 _lang = get_language_support(file)
                 if _lang.language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
-                    with contextlib.suppress(OSError):
-                        _js_ts_source = file.read_text(encoding="utf-8")
+                    with contextlib.suppress(Exception):
+                        _js_ts_source = read_file_cached(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
