@@ -62,12 +62,6 @@ class AIServiceBatchRefinerCandidate:
     optimized_line_profiler_results: str
 
 
-@dataclass(frozen=True)
-class AIServiceBatchRefinerRequest:
-    shared_context: dict[str, Any]
-    candidates: list[dict[str, Any]]
-
-
 # this should be possible to auto serialize
 @dataclass(frozen=True)
 class AdaptiveOptimizedCandidate:

@@ -13,7 +13,6 @@ from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import INDIVIDUAL_TESTCASE_TIMEOUT, TOTAL_LOOPING_TIME_EFFECTIVE
 from codeflash.code_utils.worktree_pool import WorktreePool, WorktreeSlot  # noqa: TC001
 from codeflash.either import Failure, Success
-from codeflash.languages.python.test_runner import async_execute_test_subprocess
 
 if TYPE_CHECKING:
     from codeflash.either import Result
@@ -25,6 +24,7 @@ if TYPE_CHECKING:
         OptimizedCandidateResult,
         OriginalCodeBaseline,
         TestDiff,
+        TestResults,
     )
 
 
@@ -40,18 +40,18 @@ class EvalFailure:
 class _BehavioralPass:
     """Intermediate result: candidate passed behavioral tests, ready for benchmarking."""
 
-    slot: WorktreeSlot
     candidate_index: int
     perf_test_files: list[str]
     test_env: dict[str, str]
     pytest_cmd_list: list[str]
+    behavior_test_results: TestResults
 
 
 class ParallelCandidateEvaluator:
     """Evaluates optimization candidates in parallel using git worktrees.
 
     Two-phase evaluation:
-      Phase 1 (concurrent): behavioral correctness tests
+      Phase 1 (concurrent): behavioral correctness tests — slots released after each test
       Phase 2 (sequential): benchmarking — one candidate at a time for accurate timing
     """
 
@@ -59,7 +59,6 @@ class ParallelCandidateEvaluator:
         self._optimizer = optimizer
         self._pool_size = pool_size
         self._pool: WorktreePool | None = None
-        self._code_replace_lock = anyio.Lock()
 
     async def evaluate_candidates(
         self,
@@ -80,7 +79,7 @@ class ParallelCandidateEvaluator:
         async with WorktreePool(pool_size=self._pool_size) as pool:
             self._pool = pool
 
-            # Phase 1: concurrent behavioral tests
+            # Phase 1: concurrent behavioral tests (slots released after each test)
             behavioral_passes: list[tuple[int, CandidateNode, _BehavioralPass]] = []
 
             async with anyio.create_task_group() as tg:
@@ -100,14 +99,15 @@ class ParallelCandidateEvaluator:
 
             # Phase 2: sequential benchmarking (no CPU contention)
             for result_index, candidate_node, bp in behavioral_passes:
+                slot = await pool.acquire()
                 try:
-                    bench_result = await self._benchmark_phase(bp, original_code_baseline)
+                    bench_result = await self._benchmark_phase(slot, bp, original_code_baseline)
                     results[result_index] = (candidate_node, bench_result)
                 except Exception as exc:
                     logger.error(f"Benchmark for {candidate_node.candidate.optimization_id} raised: {exc}")
                     results[result_index] = (candidate_node, Failure(EvalFailure(message=str(exc))))
                 finally:
-                    await pool.release(bp.slot)
+                    await pool.release(slot)
 
         return results
 
@@ -123,7 +123,7 @@ class ParallelCandidateEvaluator:
         results: list[tuple[CandidateNode, Result[OptimizedCandidateResult, EvalFailure] | None]],
         behavioral_passes: list[tuple[int, CandidateNode, _BehavioralPass]],
     ) -> None:
-        """Run behavioral tests for a candidate. On pass, hold the slot for benchmarking."""
+        """Run behavioral tests for a candidate. Slot is always released after the test."""
         assert self._pool is not None
         slot = await self._pool.acquire()
         try:
@@ -135,18 +135,22 @@ class ParallelCandidateEvaluator:
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
             )
-        except Exception as exc:
+        except BaseException as exc:
+            if not isinstance(exc, Exception):
+                await self._pool.release(slot)
+                raise
             logger.error(f"Candidate {candidate_node.candidate.optimization_id} raised: {exc}")
             results[result_index] = (candidate_node, Failure(EvalFailure(message=str(exc))))
             await self._pool.release(slot)
             return
 
+        # Always release slot — Phase 2 re-acquires for benchmarking
+        await self._pool.release(slot)
+
         if isinstance(outcome, Failure):
             results[result_index] = (candidate_node, outcome)
-            await self._pool.release(slot)
             return
 
-        # Behavioral pass — hold the slot for Phase 2
         behavioral_passes.append((result_index, candidate_node, outcome.unwrap()))
 
     async def _run_behavioral(
@@ -162,10 +166,9 @@ class ParallelCandidateEvaluator:
         opt = self._optimizer
         fto = opt.function_to_optimize
 
-        async with self._code_replace_lock:
-            candidate_files = await anyio.to_thread.run_sync(
-                self._replace_and_capture, opt, code_context, candidate, original_helper_code
-            )
+        candidate_files = await anyio.to_thread.run_sync(
+            self._replace_and_capture, opt, code_context, candidate, original_helper_code
+        )
 
         if candidate_files is None:
             return Failure(EvalFailure(message="Code replacement failed"))
@@ -198,13 +201,14 @@ class ParallelCandidateEvaluator:
         test_env["PYTHONPATH"] = str(worktree_project_root)
 
         from codeflash.code_utils.compat import IS_POSIX, SAFE_SYS_EXECUTABLE
+        from codeflash.languages.python.test_runner import async_execute_test_subprocess
 
         pytest_cmd_list = opt.language_support.build_pytest_cmd(SAFE_SYS_EXECUTABLE, IS_POSIX)  # type: ignore[attr-defined]
 
         blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
         blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
 
-        result_file_path = get_run_tmp_file(Path(f"pytest_results_candidate_{candidate_index}.xml"))
+        result_file_path = get_run_tmp_file(Path(f"pytest_results_candidate_{candidate_index}_{slot.index}.xml"))
         result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
 
         pytest_test_env = test_env.copy()
@@ -250,24 +254,32 @@ class ParallelCandidateEvaluator:
 
         return Success(
             _BehavioralPass(
-                slot=slot,
                 candidate_index=candidate_index,
                 perf_test_files=perf_test_files,
                 test_env=pytest_test_env,
                 pytest_cmd_list=pytest_cmd_list,
+                behavior_test_results=behavior_test_results,
             )
         )
 
     async def _benchmark_phase(
-        self, bp: _BehavioralPass, original_code_baseline: OriginalCodeBaseline
+        self, slot: WorktreeSlot, bp: _BehavioralPass, original_code_baseline: OriginalCodeBaseline
     ) -> Result[OptimizedCandidateResult, EvalFailure]:
         """Run performance benchmarks sequentially for a candidate that passed behavioral tests."""
         opt = self._optimizer
 
+        # Re-stage the candidate code in the acquired slot
+        fto = opt.function_to_optimize
+        for file in opt.test_files.test_files:
+            if file.benchmarking_file_path and file.benchmarking_file_path.exists():
+                await slot.write_candidate(
+                    file.benchmarking_file_path, file.benchmarking_file_path.read_text(encoding="utf-8")
+                )
+
         blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
         blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
 
-        perf_result_file = get_run_tmp_file(Path(f"pytest_perf_candidate_{bp.candidate_index}.xml"))
+        perf_result_file = get_run_tmp_file(Path(f"pytest_perf_candidate_{bp.candidate_index}_{slot.index}.xml"))
         perf_result_args = [f"--junitxml={perf_result_file.as_posix()}", "-o", "junit_logging=all"]
 
         perf_pytest_args = [
@@ -282,8 +294,10 @@ class ParallelCandidateEvaluator:
 
         perf_cmd = bp.pytest_cmd_list + perf_pytest_args + blocklist_args + perf_result_args + bp.perf_test_files
 
+        from codeflash.languages.python.test_runner import async_execute_test_subprocess
+
         try:
-            await async_execute_test_subprocess(cmd_list=perf_cmd, cwd=bp.slot.path, env=bp.test_env, timeout=600)
+            await async_execute_test_subprocess(cmd_list=perf_cmd, cwd=slot.path, env=bp.test_env, timeout=600)
         except subprocess.TimeoutExpired:
             logger.warning(f"Performance test timeout for candidate {bp.candidate_index}")
             return Failure(EvalFailure(message="Performance test timeout"))
@@ -307,7 +321,7 @@ class ParallelCandidateEvaluator:
             OptimizedCandidateResult(
                 max_loop_count=loop_count,
                 best_test_runtime=total_timing,
-                behavior_test_results=None,
+                behavior_test_results=bp.behavior_test_results,
                 benchmarking_test_results=perf_test_results,
                 replay_benchmarking_test_results=None,
                 optimization_candidate_index=bp.candidate_index,

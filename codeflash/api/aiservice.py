@@ -440,7 +440,7 @@ class AiServiceClient:
 
         if response.status_code == 200:
             refined_optimizations = response.json()["refinements"]
-            return self._get_valid_candidates(refined_optimizations, OptimizedCandidateSource.REFINE)
+            return self._get_valid_candidates(refined_optimizations, OptimizedCandidateSource.REFINE, language=language)
 
         self.log_error_response(response, "generating batch optimized candidates", "cli-optimize-error-response")
         console.rule()
