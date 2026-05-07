@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Optional, cast
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 from pydantic.dataclasses import dataclass
 
+from codeflash.models.shared_types import OptimizedCandidateSource
 from codeflash.models.test_type import TestType
 
 if TYPE_CHECKING:
@@ -48,6 +49,23 @@ class AIServiceRefinerRequest:
     language_version: str | None = None  # e.g., '3.11.0' for Python, 'ES2022' for JS
     # Multi-file context support
     additional_context_files: dict[str, str] | None = None  # {filepath: content} for imported modules
+
+
+@dataclass(frozen=True)
+class AIServiceBatchRefinerCandidate:
+    optimization_id: str
+    optimized_source_code: str
+    optimized_explanation: str
+    optimized_code_runtime: int
+    original_code_runtime: int
+    speedup: str
+    optimized_line_profiler_results: str
+
+
+@dataclass(frozen=True)
+class AIServiceBatchRefinerRequest:
+    shared_context: dict[str, Any]
+    candidates: list[dict[str, Any]]
 
 
 # this should be possible to auto serialize
@@ -298,11 +316,11 @@ class CodeStringsMarkdown(BaseModel):
 
         """
         if self._cache.get("flat") is not None:
-            return self._cache["flat"]
+            return cast("str", self._cache["flat"])
         self._cache["flat"] = "\n".join(
             get_code_block_splitter(block.file_path) + "\n" + block.code for block in self.code_strings
         )
-        return self._cache["flat"]
+        return cast("str", self._cache["flat"])
 
     @property
     def markdown(self) -> str:
@@ -332,7 +350,7 @@ class CodeStringsMarkdown(BaseModel):
 
         """
         try:
-            return self._cache["file_to_path"]
+            return cast("dict[str, str]", self._cache["file_to_path"])
         except KeyError:
             mapping = {str(code_string.file_path): code_string.code for code_string in self.code_strings}
             self._cache["file_to_path"] = mapping
@@ -494,7 +512,7 @@ class TestFiles(BaseModel):
         # Only lowercase on Windows where filesystem is case-insensitive
         return resolved.lower() if sys.platform == "win32" else resolved
 
-    def __iter__(self) -> Iterator[TestFile]:
+    def __iter__(self) -> Iterator[TestFile]:  # type: ignore[override]
         return iter(self.test_files)
 
     def __len__(self) -> int:
@@ -514,9 +532,9 @@ class CandidateEvaluationContext:
     optimized_runtimes: dict[str, float | None] = Field(default_factory=dict)
     is_correct: dict[str, bool] = Field(default_factory=dict)
     optimized_line_profiler_results: dict[str, str] = Field(default_factory=dict)
-    ast_code_to_id: dict = Field(default_factory=dict)
+    ast_code_to_id: dict[str, Any] = Field(default_factory=dict)
     optimizations_post: dict[str, str] = Field(default_factory=dict)
-    valid_optimizations: list = Field(default_factory=list)
+    valid_optimizations: list[Any] = Field(default_factory=list)
 
     def record_failed_candidate(self, optimization_id: str) -> None:
         """Record results for a failed candidate."""
@@ -543,7 +561,7 @@ class CandidateEvaluationContext:
         # Copy results from the previous evaluation (use .get() in case past_opt_id was registered
         # but never benchmarked due to an unhandled exception in process_single_candidate)
         self.speedup_ratios[candidate.optimization_id] = self.speedup_ratios.get(past_opt_id)
-        self.is_correct[candidate.optimization_id] = self.is_correct.get(past_opt_id)
+        self.is_correct[candidate.optimization_id] = self.is_correct.get(past_opt_id, False)
         self.optimized_runtimes[candidate.optimization_id] = self.optimized_runtimes.get(past_opt_id)
 
         # Line profiler results only available for successful runs
@@ -592,15 +610,6 @@ class TestsInFile:
     test_type: TestType
 
 
-class OptimizedCandidateSource(str, Enum):
-    OPTIMIZE = "OPTIMIZE"
-    OPTIMIZE_LP = "OPTIMIZE_LP"
-    REFINE = "REFINE"
-    REPAIR = "REPAIR"
-    ADAPTIVE = "ADAPTIVE"
-    JIT_REWRITE = "JIT_REWRITE"
-
-
 @dataclass(frozen=True)
 class OptimizedCandidate:
     source_code: CodeStringsMarkdown
@@ -631,7 +640,7 @@ class OriginalCodeBaseline(BaseModel):
     behavior_test_results: TestResults
     benchmarking_test_results: TestResults
     replay_benchmarking_test_results: Optional[dict[BenchmarkKey, TestResults]] = None
-    line_profile_results: dict
+    line_profile_results: dict[str, Any]
     runtime: int
     coverage_results: Optional[CoverageData]
     async_throughput: Optional[int] = None
@@ -794,6 +803,7 @@ class InvocationId:
             )
 
         if self.test_class_name:
+            assert self.test_function_name is not None
             for stmt in module_node.body:
                 if isinstance(stmt, cst.ClassDef) and stmt.name.value == self.test_class_name:
                     func_node = self.find_func_in_class(stmt, self.test_function_name)
@@ -884,7 +894,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
         """Group TestResults by benchmark for calculating improvements for each benchmark."""
         from codeflash.code_utils.code_utils import module_name_from_file_path
 
-        test_results_by_benchmark = defaultdict(TestResults)
+        test_results_by_benchmark: defaultdict[BenchmarkKey, TestResults] = defaultdict(TestResults)
         benchmark_module_path = {}
         for benchmark_key in benchmark_keys:
             benchmark_module_path[benchmark_key] = module_name_from_file_path(
@@ -1015,7 +1025,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
         return max(loop_indices) if loop_indices else 0
 
     def file_to_no_of_tests(self, test_functions_to_remove: list[str]) -> Counter[Path]:
-        map_gen_test_file_to_no_of_tests = Counter()
+        map_gen_test_file_to_no_of_tests: Counter[Path] = Counter()
         for gen_test_result in self.test_results:
             if (
                 gen_test_result.test_type == TestType.GENERATED_REGRESSION
@@ -1024,7 +1034,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
                 map_gen_test_file_to_no_of_tests[gen_test_result.file_name] += 1
         return map_gen_test_file_to_no_of_tests
 
-    def __iter__(self) -> Iterator[FunctionTestInvocation]:
+    def __iter__(self) -> Iterator[FunctionTestInvocation]:  # type: ignore[override]
         return iter(self.test_results)
 
     def __len__(self) -> int:
@@ -1051,7 +1061,7 @@ class TestResults(BaseModel):  # noqa: PLW1641
         if len(self) != len(other):
             return False
         original_recursion_limit = sys.getrecursionlimit()
-        cast("TestResults", other)
+        assert isinstance(other, TestResults)
         for test_result in self:
             other_test_result = other.get_by_unique_invocation_loop_id(test_result.unique_invocation_loop_id)
             if other_test_result is None:

@@ -12,14 +12,9 @@ from typing import Optional
 from pydantic import Field
 from pydantic.dataclasses import dataclass
 
+from codeflash.models.shared_types import FunctionParent
 
-@dataclass(frozen=True)
-class FunctionParent:
-    name: str
-    type: str
-
-    def __str__(self) -> str:
-        return f"{self.type}:{self.name}"
+__all__ = ["FunctionParent", "FunctionToOptimize"]
 
 
 @dataclass(frozen=True, config={"arbitrary_types_allowed": True})
