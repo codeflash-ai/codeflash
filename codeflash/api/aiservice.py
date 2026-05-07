@@ -22,9 +22,9 @@ from codeflash.models.models import (
     FunctionRepairInfo,
     OptimizationReviewResult,
     OptimizedCandidate,
-    OptimizedCandidateSource,
     TestFileReview,
 )
+from codeflash.models.shared_types import OptimizedCandidateSource
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
