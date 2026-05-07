@@ -37,6 +37,7 @@ __all__ = ["FunctionParent", "FunctionToOptimize"]
 
 if TYPE_CHECKING:
     from argparse import Namespace
+    from collections.abc import Generator
 
     from codeflash.models.models import CodeOptimizationContext
     from codeflash.verification.verification_utils import TestConfig
@@ -49,6 +50,46 @@ class FunctionProperties:
     is_staticmethod: Optional[bool]
     is_classmethod: Optional[bool]
     staticmethod_class_name: Optional[str]
+
+
+# =============================================================================
+# Discovery-scoped file/AST cache
+# =============================================================================
+
+_active_discovery_cache: dict[Path, str] | None = None
+_active_ast_cache: dict[Path, ast.Module] | None = None
+
+
+@contextlib.contextmanager
+def discovery_cache() -> Generator[None, None, None]:
+    global _active_discovery_cache, _active_ast_cache
+    _active_discovery_cache = {}
+    _active_ast_cache = {}
+    try:
+        yield
+    finally:
+        _active_discovery_cache = None
+        _active_ast_cache = None
+
+
+def read_file_cached(file_path: Path) -> str:
+    if _active_discovery_cache is not None:
+        if file_path not in _active_discovery_cache:
+            _active_discovery_cache[file_path] = file_path.read_text(encoding="utf-8")
+        return _active_discovery_cache[file_path]
+    return file_path.read_text(encoding="utf-8")
+
+
+def parse_ast_cached(file_path: Path, source: str | None = None) -> ast.Module:
+    if _active_ast_cache is not None:
+        if file_path not in _active_ast_cache:
+            if source is None:
+                source = read_file_cached(file_path)
+            _active_ast_cache[file_path] = ast.parse(source)
+        return _active_ast_cache[file_path]
+    if source is None:
+        source = read_file_cached(file_path)
+    return ast.parse(source)
 
 
 # =============================================================================
@@ -152,7 +193,7 @@ def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bo
     from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
     try:
-        source = file_path.read_text(encoding="utf-8")
+        source = read_file_cached(file_path)
         analyzer = get_analyzer_for_file(file_path)
         return analyzer.is_function_exported(source, function_name)
     except Exception as e:
@@ -170,7 +211,7 @@ def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: s
     from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
     try:
-        source = file_path.read_text(encoding="utf-8")
+        source = read_file_cached(file_path)
         analyzer = get_analyzer_for_file(file_path)
         all_funcs = analyzer.find_functions(
             source, include_methods=True, include_arrow_functions=True, require_name=True
@@ -181,28 +222,6 @@ def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: s
     except Exception as e:
         logger.debug(f"Failed to check function existence for {function_name}: {e}")
     return False
-
-
-def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list[FunctionToOptimize]]:
-    """Find all optimizable functions using the language support abstraction.
-
-    This function uses the registered language support for the file's language
-    to discover functions, then converts them to FunctionToOptimize instances.
-    """
-    from codeflash.languages.base import FunctionFilterCriteria
-
-    functions: dict[Path, list[FunctionToOptimize]] = {}
-
-    try:
-        lang_support = get_language_support(file_path)
-        require_return = lang_support.language != Language.JAVA
-        criteria = FunctionFilterCriteria(require_return=require_return)
-        source = file_path.read_text(encoding="utf-8")
-        functions[file_path] = lang_support.discover_functions(source, file_path, criteria)
-    except Exception as e:
-        logger.debug(f"Failed to discover functions in {file_path}: {e}")
-
-    return functions
 
 
 def get_functions_to_optimize(
@@ -222,7 +241,7 @@ def get_functions_to_optimize(
     functions: dict[Path, list[FunctionToOptimize]]
     trace_file_path: Path | None = None
     is_lsp = is_LSP_enabled()
-    with warnings.catch_warnings():
+    with discovery_cache(), warnings.catch_warnings():
         warnings.simplefilter(action="ignore", category=SyntaxWarning)
         if optimize_all:
             logger.info("!lsp|Finding all functions in the module '%s'…", optimize_all)
@@ -489,7 +508,7 @@ def find_all_functions_in_file(file_path: Path) -> dict[Path, list[FunctionToOpt
         lang_support = get_language_support(file_path)
         require_return = lang_support.language != Language.JAVA
         criteria = FunctionFilterCriteria(require_return=require_return)
-        source = file_path.read_text(encoding="utf-8")
+        source = read_file_cached(file_path)
         return {file_path: lang_support.discover_functions(source, file_path, criteria)}
     except Exception as e:
         logger.debug(f"Failed to discover functions in {file_path}: {e}")
@@ -506,21 +525,20 @@ def get_all_replay_test_functions(
     trace_file_path: Path | None = None
     for replay_test_file in replay_test:
         try:
-            with replay_test_file.open("r", encoding="utf8") as f:
-                tree = ast.parse(f.read())
-                for node in ast.walk(tree):
-                    if isinstance(node, ast.Assign):
-                        for target in node.targets:
-                            if (
-                                isinstance(target, ast.Name)
-                                and target.id == "trace_file_path"
-                                and isinstance(node.value, ast.Constant)
-                                and isinstance(node.value.value, str)
-                            ):
-                                trace_file_path = Path(node.value.value)
-                                break
-                        if trace_file_path:
+            tree = parse_ast_cached(replay_test_file)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if (
+                            isinstance(target, ast.Name)
+                            and target.id == "trace_file_path"
+                            and isinstance(node.value, ast.Constant)
+                            and isinstance(node.value.value, str)
+                        ):
+                            trace_file_path = Path(node.value.value)
                             break
+                    if trace_file_path:
+                        break
             if trace_file_path:
                 break
         except Exception as e:
@@ -634,7 +652,7 @@ def _get_java_replay_test_functions(
         from codeflash.languages.registry import get_language_support
 
         lang_support = get_language_support(source_file)
-        source_code = source_file.read_text(encoding="utf-8")
+        source_code = read_file_cached(source_file)
         all_functions = lang_support.discover_functions(source_code, source_file)
 
         for func in all_functions:
@@ -762,11 +780,10 @@ class TopLevelFunctionOrMethodVisitor(ast.NodeVisitor):
 def inspect_top_level_functions_or_methods(
     file_name: Path, function_or_method_name: str, class_name: str | None = None, line_no: int | None = None
 ) -> FunctionProperties | None:
-    with file_name.open(encoding="utf8") as file:
-        try:
-            ast_module = ast.parse(file.read())
-        except Exception:
-            return None
+    try:
+        ast_module = parse_ast_cached(file_name)
+    except Exception:
+        return None
     visitor = TopLevelFunctionOrMethodVisitor(
         file_name=file_name, function_or_method_name=function_or_method_name, class_name=class_name, line_no=line_no
     )
