@@ -547,10 +547,9 @@ class CandidateEvaluationContext:
         self.optimized_runtimes[candidate.optimization_id] = self.optimized_runtimes.get(past_opt_id)
 
         # Line profiler results only available for successful runs
-        if past_opt_id in self.optimized_line_profiler_results:
-            self.optimized_line_profiler_results[candidate.optimization_id] = self.optimized_line_profiler_results[
-                past_opt_id
-            ]
+        line_profiler_result = self.optimized_line_profiler_results.get(past_opt_id)
+        if line_profiler_result is not None:
+            self.optimized_line_profiler_results[candidate.optimization_id] = line_profiler_result
 
         self.optimizations_post[candidate.optimization_id] = self.ast_code_to_id[normalized_code][
             "shorter_source_code"
