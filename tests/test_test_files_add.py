@@ -1,7 +1,5 @@
 from pathlib import Path
 
-import pytest
-
 from codeflash.models.models import TestFile, TestFiles
 from codeflash.models.test_type import TestType
 
@@ -18,7 +16,7 @@ class TestTestFilesAdd:
         assert len(tf.test_files) == 1
         assert tf.test_files[0] is test_file
 
-    def test_add_duplicate_raises(self) -> None:
+    def test_add_duplicate_is_noop(self) -> None:
         tf = TestFiles(test_files=[])
         test_file = TestFile(
             instrumented_behavior_file_path=Path("/tmp/test_behavior.py"),
@@ -26,8 +24,8 @@ class TestTestFilesAdd:
             test_type=TestType.GENERATED_REGRESSION,
         )
         tf.add(test_file)
-        with pytest.raises(ValueError, match="Test file already exists"):
-            tf.add(test_file)
+        tf.add(test_file)  # silent skip — first write wins
+        assert len(tf.test_files) == 1
 
     def test_add_many_files_performance(self) -> None:
         tf = TestFiles(test_files=[])
