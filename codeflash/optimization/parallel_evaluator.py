@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     )
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class EvalFailure:
     """Structured failure from parallel evaluation, carrying test diffs for repair."""
 
@@ -36,7 +36,7 @@ class EvalFailure:
     diffs: list[TestDiff] = dataclasses.field(default_factory=list)
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class _BehavioralPass:
     """Intermediate result: candidate passed behavioral tests, ready for benchmarking."""
 
