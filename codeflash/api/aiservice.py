@@ -22,9 +22,9 @@ from codeflash.models.models import (
     FunctionRepairInfo,
     OptimizationReviewResult,
     OptimizedCandidate,
-    OptimizedCandidateSource,
     TestFileReview,
 )
+from codeflash.models.shared_types import OptimizedCandidateSource
 from codeflash.telemetry.posthog_cf import ph
 from codeflash.version import __version__ as codeflash_version
 
@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from codeflash.models.ExperimentMetadata import ExperimentMetadata
     from codeflash.models.models import (
         AIServiceAdaptiveOptimizeRequest,
+        AIServiceBatchRefinerCandidate,
         AIServiceCodeRepairRequest,
         AIServiceRefinerRequest,
     )
@@ -383,6 +384,97 @@ class AiServiceClient:
         self.log_error_response(response, "generating optimized candidates", "cli-optimize-error-response")
         console.rule()
         return []
+
+    def optimize_code_refinement_batch(
+        self,
+        *,
+        original_source_code: str,
+        read_only_dependency_code: str,
+        original_line_profiler_results: str,
+        trace_id: str,
+        language: str,
+        language_version: str | None,
+        function_references: str | None,
+        candidates: list[AIServiceBatchRefinerCandidate],
+        rerun_trace_id: str | None = None,
+    ) -> list[OptimizedCandidate]:
+        shared_context: dict[str, Any] = {
+            "original_source_code": original_source_code,
+            "read_only_dependency_code": read_only_dependency_code,
+            "original_line_profiler_results": original_line_profiler_results,
+            "trace_id": trace_id,
+            "language": language,
+            "function_references": function_references,
+            "rerun_trace_id": rerun_trace_id,
+        }
+        self.add_language_metadata(shared_context, language_version)
+
+        candidate_payloads: list[dict[str, Any]] = []
+        for c in candidates:
+            candidate_payloads.append(
+                {
+                    "optimization_id": c.optimization_id,
+                    "optimized_source_code": c.optimized_source_code,
+                    "optimized_explanation": c.optimized_explanation,
+                    "optimized_code_runtime": humanize_runtime(c.optimized_code_runtime),
+                    "original_code_runtime": humanize_runtime(c.original_code_runtime),
+                    "speedup": c.speedup,
+                    "optimized_line_profiler_results": c.optimized_line_profiler_results,
+                    "call_sequence": self.get_next_sequence(),
+                }
+            )
+
+        payload: dict[str, Any] = {"shared_context": shared_context, "candidates": candidate_payloads}
+
+        try:
+            response = self.make_ai_service_request("/batch_refinement", payload=payload, timeout=self.timeout)
+        except requests.exceptions.RequestException as e:
+            logger.exception(f"Error generating batch optimization refinements: {e}")
+            ph("cli-optimize-error-caught", {"error": str(e)})
+            return []
+
+        if response.status_code == 404:
+            return self._fallback_to_sequential_refinement(
+                shared_context=shared_context, candidates=candidates, rerun_trace_id=rerun_trace_id
+            )
+
+        if response.status_code == 200:
+            refined_optimizations = response.json()["refinements"]
+            return self._get_valid_candidates(refined_optimizations, OptimizedCandidateSource.REFINE)
+
+        self.log_error_response(response, "generating batch optimized candidates", "cli-optimize-error-response")
+        console.rule()
+        return []
+
+    def _fallback_to_sequential_refinement(
+        self,
+        *,
+        shared_context: dict[str, Any],
+        candidates: list[AIServiceBatchRefinerCandidate],
+        rerun_trace_id: str | None,
+    ) -> list[OptimizedCandidate]:
+        from codeflash.models.models import AIServiceRefinerRequest
+
+        requests_list = [
+            AIServiceRefinerRequest(
+                optimization_id=c.optimization_id,
+                original_source_code=shared_context["original_source_code"],
+                read_only_dependency_code=shared_context["read_only_dependency_code"],
+                original_code_runtime=c.original_code_runtime,
+                optimized_source_code=c.optimized_source_code,
+                optimized_explanation=c.optimized_explanation,
+                optimized_code_runtime=c.optimized_code_runtime,
+                speedup=c.speedup,
+                trace_id=shared_context["trace_id"],
+                original_line_profiler_results=shared_context["original_line_profiler_results"],
+                optimized_line_profiler_results=c.optimized_line_profiler_results,
+                function_references=shared_context.get("function_references"),
+                language=shared_context["language"],
+                language_version=shared_context.get("language_version"),
+            )
+            for c in candidates
+        ]
+        return self.optimize_code_refinement(requests_list, rerun_trace_id=rerun_trace_id)
 
     def code_repair(
         self, request: AIServiceCodeRepairRequest, rerun_trace_id: str | None = None
