@@ -826,8 +826,8 @@ class Optimizer:
         return Success(True)  # noqa: FBT003
 
     def mirror_paths_for_worktree_mode(self, worktree_dir: Path) -> None:
-        original_args = copy.deepcopy(self.args)
-        original_test_cfg = copy.deepcopy(self.test_cfg)
+        original_args = copy.copy(self.args)
+        original_test_cfg = copy.copy(self.test_cfg)
         self.original_args_and_test_cfg = (original_args, original_test_cfg)
 
         original_git_root = git_root_dir()
