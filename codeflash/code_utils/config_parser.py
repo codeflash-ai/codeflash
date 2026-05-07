@@ -12,6 +12,28 @@ PYPROJECT_TOML_CACHE: dict[Path, Path] = {}
 ALL_CONFIG_FILES: dict[Path, dict[str, Path]] = {}
 
 
+def _try_parse_go_config() -> tuple[dict[str, Any], Path] | None:
+    dir_path = Path.cwd()
+    while dir_path != dir_path.parent:
+        if (dir_path / "go.mod").exists():
+            module_root = str(dir_path.resolve())
+            return {
+                "language": "go",
+                "module_root": module_root,
+                "tests_root": module_root,
+                "pytest_cmd": "pytest",
+                "git_remote": "origin",
+                "disable_telemetry": False,
+                "disable_imports_sorting": False,
+                "override_fixtures": False,
+                "benchmark": False,
+                "formatter_cmds": [],
+                "ignore_paths": [],
+            }, dir_path
+        dir_path = dir_path.parent
+    return None
+
+
 def _try_parse_java_build_config() -> tuple[dict[str, Any], Path] | None:
     """Detect Java project from build files and parse config from pom.xml/gradle.properties.
 
@@ -106,10 +128,22 @@ def find_conftest_files(test_paths: list[Path]) -> list[Path]:
 def parse_config_file(
     config_file_path: Path | None = None, override_formatter_check: bool = False
 ) -> tuple[dict[str, Any], Path]:
-    # Detect all config sources — Java build files, package.json, pyproject.toml
+    # Detect all config sources — Go modules, Java build files, package.json, pyproject.toml
+    go_result = _try_parse_go_config() if config_file_path is None else None
     java_result = _try_parse_java_build_config() if config_file_path is None else None
     package_json_path = find_package_json(config_file_path)
     pyproject_toml_path = find_closest_config_file("pyproject.toml") if config_file_path is None else None
+
+    # Use Go config only if no closer config exists
+    if go_result is not None:
+        go_depth = len(go_result[1].parts)
+        has_closer = (
+            (java_result is not None and len(java_result[1].parts) >= go_depth)
+            or (package_json_path is not None and len(package_json_path.parent.parts) >= go_depth)
+            or (pyproject_toml_path is not None and len(pyproject_toml_path.parent.parts) >= go_depth)
+        )
+        if not has_closer:
+            return go_result
 
     # Use Java config only if no closer JS/Python config exists (monorepo support).
     # In a monorepo with a parent pom.xml and a child package.json, the closer config wins.
