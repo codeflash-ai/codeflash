@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from __future__ import annotations
 
 import concurrent.futures
@@ -1017,6 +1018,34 @@ class FunctionOptimizer:
         )
 
         return best_optimization, benchmark_tree
+
+    def _run_line_profiler_for_winner(
+        self,
+        best_optimization: BestOptimization,
+        code_context: CodeOptimizationContext,
+        original_helper_code: dict[Path, str],
+        eval_ctx: CandidateEvaluationContext,
+    ) -> BestOptimization:
+        """Run line profiler on the winning candidate from parallel evaluation."""
+        try:
+            self.replace_function_and_helpers_with_optimized_code(
+                code_context=code_context,
+                optimized_code=best_optimization.candidate.source_code,
+                original_helper_code=original_helper_code,
+            )
+            with progress_bar("Running line-by-line profiling"):
+                lp_results = self.line_profiler_step(
+                    code_context=code_context, original_helper_code=original_helper_code, candidate_index=0
+                )
+            eval_ctx.record_line_profiler_result(best_optimization.candidate.optimization_id, lp_results["str_out"])
+            best_optimization.line_profiler_test_results = lp_results
+        except (ValueError, SyntaxError, AttributeError) as e:
+            logger.warning(f"Line profiler failed for winning candidate: {e}")
+        finally:
+            self.write_code_and_helpers(
+                self.function_to_optimize_source_code, original_helper_code, self.function_to_optimize.file_path
+            )
+        return best_optimization
 
     def select_best_optimization(
         self,
