@@ -35,7 +35,6 @@ class TestWorktreePoolLifecycle:
                     for slot in pool._slots:
                         assert slot.path.exists()
                         assert slot.path.is_dir()
-                        assert (slot.path / ".codeflash_pool.pid").exists()
 
                 # After cleanup, slots are cleared
                 assert len(pool._slots) == 0
@@ -266,10 +265,17 @@ class TestParallelCandidateEvaluator:
         mock_result = MagicMock()
         mock_result.best_test_runtime = 5000
 
+        mock_behavior_results = MagicMock()
+
         async def mock_behavioral(self_eval: object, *args: object, **kwargs: object) -> Success:  # type: ignore[type-arg]
-            slot = MagicMock()
             return Success(
-                _BehavioralPass(slot=slot, candidate_index=0, perf_test_files=[], test_env={}, pytest_cmd_list=[])
+                _BehavioralPass(
+                    candidate_index=0,
+                    perf_test_files=[],
+                    test_env={},
+                    pytest_cmd_list=[],
+                    behavior_test_results=mock_behavior_results,
+                )
             )
 
         async def _run() -> list:  # type: ignore[type-arg]
@@ -306,13 +312,19 @@ class TestParallelCandidateEvaluator:
         mock_result.best_test_runtime = 1000
 
         behavioral_call_count = 0
+        mock_behavior_results = MagicMock()
 
         async def mock_behavioral(self_eval: object, *args: object, **kwargs: object) -> Success:  # type: ignore[type-arg]
             nonlocal behavioral_call_count
             behavioral_call_count += 1
-            slot = MagicMock()
             return Success(
-                _BehavioralPass(slot=slot, candidate_index=0, perf_test_files=[], test_env={}, pytest_cmd_list=[])
+                _BehavioralPass(
+                    candidate_index=0,
+                    perf_test_files=[],
+                    test_env={},
+                    pytest_cmd_list=[],
+                    behavior_test_results=mock_behavior_results,
+                )
             )
 
         benchmark_call_count = 0

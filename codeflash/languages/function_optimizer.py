@@ -1040,7 +1040,7 @@ class FunctionOptimizer:
                 )
             eval_ctx.record_line_profiler_result(best_optimization.candidate.optimization_id, lp_results["str_out"])
             best_optimization.line_profiler_test_results = lp_results
-        except (ValueError, SyntaxError, AttributeError) as e:
+        except (ValueError, SyntaxError, AttributeError, Exception) as e:
             logger.warning(f"Line profiler failed for winning candidate: {e}")
         finally:
             self.write_code_and_helpers(
@@ -1684,6 +1684,9 @@ class FunctionOptimizer:
         test_diffs: list[TestDiff] | None = None,
     ) -> concurrent.futures.Future | None:
         """Submit a code repair request if the candidate is eligible."""
+        if not test_diffs:
+            return None
+
         max_repairs = get_effort_value(EffortKeys.MAX_CODE_REPAIRS_PER_TRACE, self.effort)
         if self.repair_counter >= max_repairs:
             return None
