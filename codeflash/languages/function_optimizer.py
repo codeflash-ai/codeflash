@@ -1602,17 +1602,33 @@ class FunctionOptimizer:
                     )
                     eval_ctx.valid_optimizations.append(best_optimization)
 
-                    batch_refiner_candidates.append(
-                        AIServiceBatchRefinerCandidate(
-                            optimization_id=candidate.optimization_id,
-                            optimized_source_code=candidate.source_code.markdown,
-                            optimized_explanation=candidate.explanation,
-                            optimized_code_runtime=candidate_result.best_test_runtime,
-                            original_code_runtime=original_code_baseline.runtime,
-                            speedup=f"{int(perf_gain * 100)}%",
-                            optimized_line_profiler_results="",
-                        )
+                    current_tree_candidates = candidate_node.path_to_root()
+                    is_candidate_refined_before = any(
+                        c.source == OptimizedCandidateSource.REFINE for c in current_tree_candidates
                     )
+
+                    if is_candidate_refined_before:
+                        future_adaptive = self.call_adaptive_optimize(
+                            trace_id=self.get_trace_id(exp_type),
+                            original_source_code=code_context.read_writable_code.markdown,
+                            prev_candidates=current_tree_candidates,
+                            eval_ctx=eval_ctx,
+                            ai_service_client=ai_service_client,
+                        )
+                        if future_adaptive:
+                            self.future_adaptive_optimizations.append(future_adaptive)
+                    else:
+                        batch_refiner_candidates.append(
+                            AIServiceBatchRefinerCandidate(
+                                optimization_id=candidate.optimization_id,
+                                optimized_source_code=candidate.source_code.markdown,
+                                optimized_explanation=candidate.explanation,
+                                optimized_code_runtime=candidate_result.best_test_runtime,
+                                original_code_runtime=original_code_baseline.runtime,
+                                speedup=f"{int(perf_gain * 100)}%",
+                                optimized_line_profiler_results="",
+                            )
+                        )
 
             # Dispatch refinement immediately so CandidateProcessor sees it
             if batch_refiner_candidates:
