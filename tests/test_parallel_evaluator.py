@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import anyio
@@ -38,6 +39,40 @@ class TestWorktreePoolLifecycle:
 
                 # After cleanup, slots are cleared
                 assert len(pool._slots) == 0
+
+        anyio.run(_run)
+
+    def test_partial_pool_initialization(self, tmp_path: Path) -> None:
+        """Pool operates at reduced capacity if some slots fail to create."""
+        from unittest.mock import patch
+
+        from codeflash.code_utils.worktree_pool import WorktreePool
+
+        pool_size = 3
+        base_dir = tmp_path.resolve() / "worktrees"
+        repo_root = Path(__file__).resolve().parents[1]
+
+        call_count = 0
+
+        original_create_slot = WorktreePool._create_slot
+
+        async def failing_create_slot(self: Any, index: int) -> Any:
+            nonlocal call_count
+            call_count += 1
+            if index == 1:
+                raise RuntimeError("Simulated git worktree failure")
+            return await original_create_slot(self, index)
+
+        async def _run() -> None:
+            with (
+                patch("codeflash.code_utils.worktree_pool.git_root_dir", return_value=repo_root),
+                patch.object(WorktreePool, "_create_slot", failing_create_slot),
+            ):
+                async with WorktreePool(pool_size=pool_size, base_dir=base_dir) as pool:
+                    assert len(pool._slots) == 2
+                    slot = await pool.acquire()
+                    assert slot.index != 1
+                    await pool.release(slot)
 
         anyio.run(_run)
 
@@ -275,6 +310,9 @@ class TestParallelCandidateEvaluator:
                     test_env={},
                     pytest_cmd_list=[],
                     behavior_test_results=mock_behavior_results,
+                    fto_code="def f(): pass",
+                    helper_codes={},
+                    fto_file_path=Path("/tmp/module.py"),
                 )
             )
 
@@ -324,6 +362,9 @@ class TestParallelCandidateEvaluator:
                     test_env={},
                     pytest_cmd_list=[],
                     behavior_test_results=mock_behavior_results,
+                    fto_code="def f(): pass",
+                    helper_codes={},
+                    fto_file_path=Path("/tmp/module.py"),
                 )
             )
 
@@ -355,6 +396,108 @@ class TestParallelCandidateEvaluator:
         for _, result in results:
             assert is_successful(result)
 
+    def test_benchmark_phase_restages_candidate_code(self, tmp_path: Path) -> None:
+        """Phase 2 must write fto_code and helper_codes to the slot before running benchmarks."""
+        from codeflash.optimization.parallel_evaluator import _BehavioralPass
+
+        opt = self._make_optimizer_mock(tmp_path)
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "module.py").write_text("def f(): pass", encoding="utf-8")
+
+        node = self._make_candidate_node()
+        evaluator = ParallelCandidateEvaluator(opt, pool_size=1)
+
+        repo_root = Path(__file__).resolve().parents[1]
+        fto_code = "def f(): return 42  # optimized"
+        helper_path = tmp_path / "src" / "helpers.py"
+        helper_codes = {helper_path: "HELPER_CODE = True"}
+
+        write_calls: list[tuple[Path, str]] = []
+
+        async def tracking_write_candidate(self_slot: object, file_path: Path, code: str) -> None:
+            write_calls.append((file_path, code))
+
+        async def mock_behavioral(self_eval: object, *args: object, **kwargs: object) -> Success:  # type: ignore[type-arg]
+            return Success(
+                _BehavioralPass(
+                    candidate_index=0,
+                    perf_test_files=[],
+                    test_env={"PATH": "/usr/bin"},
+                    pytest_cmd_list=[sys.executable, "-m", "pytest"],
+                    behavior_test_results=MagicMock(),
+                    fto_code=fto_code,
+                    helper_codes=helper_codes,
+                    fto_file_path=Path(opt.function_to_optimize.file_path),
+                )
+            )
+
+        async def _run() -> list:  # type: ignore[type-arg]
+            with (
+                patch("codeflash.code_utils.worktree_pool.git_root_dir", return_value=repo_root),
+                patch.object(ParallelCandidateEvaluator, "_run_behavioral", mock_behavioral),
+                patch(
+                    "codeflash.code_utils.worktree_pool.WorktreeSlot.write_candidate", tracking_write_candidate
+                ),
+                patch(
+                    "codeflash.languages.python.test_runner.async_execute_test_subprocess",
+                    return_value=MagicMock(returncode=0, stdout="", stderr=""),
+                ),
+                patch(
+                    "codeflash.verification.parse_test_output.parse_test_xml",
+                    return_value=MagicMock(test_results=[MagicMock()], effective_loop_count=lambda: 10, total_passed_runtime=lambda: 5000),
+                ),
+            ):
+                return await evaluator.evaluate_candidates(
+                    candidates=[(node, 0, None)],
+                    code_context=MagicMock(),
+                    original_code_baseline=MagicMock(),
+                    original_helper_code={},
+                    file_path_to_helper_classes={},
+                )
+
+        anyio.run(_run)
+
+        written_codes = {p: c for p, c in write_calls}
+        assert Path(opt.function_to_optimize.file_path) in written_codes
+        assert written_codes[Path(opt.function_to_optimize.file_path)] == fto_code
+        assert helper_path in written_codes
+        assert written_codes[helper_path] == "HELPER_CODE = True"
+
+    def test_empty_candidates_returns_empty(self, tmp_path: Path) -> None:
+        opt = self._make_optimizer_mock(tmp_path)
+        evaluator = ParallelCandidateEvaluator(opt, pool_size=1)
+        repo_root = Path(__file__).resolve().parents[1]
+
+        async def _run() -> list:  # type: ignore[type-arg]
+            with patch("codeflash.code_utils.worktree_pool.git_root_dir", return_value=repo_root):
+                return await evaluator.evaluate_candidates(
+                    candidates=[],
+                    code_context=MagicMock(),
+                    original_code_baseline=MagicMock(),
+                    original_helper_code={},
+                    file_path_to_helper_classes={},
+                )
+
+        results = anyio.run(_run)
+        assert results == []
+
+    def test_replace_and_capture_restores_on_failure(self, tmp_path: Path) -> None:
+        """_replace_and_capture must restore original code even when replacement raises."""
+        opt = self._make_optimizer_mock(tmp_path)
+        (tmp_path / "src").mkdir(parents=True)
+        original_code = "def f(): pass"
+        (tmp_path / "src" / "module.py").write_text(original_code, encoding="utf-8")
+
+        opt.replace_function_and_helpers_with_optimized_code.side_effect = ValueError("bad code")
+
+        result = ParallelCandidateEvaluator._replace_and_capture(
+            opt, MagicMock(), MagicMock(), {}
+        )
+        assert result is None
+        opt.write_code_and_helpers.assert_called_once_with(
+            opt.function_to_optimize_source_code, {}, opt.function_to_optimize.file_path
+        )
+
     def test_more_candidates_than_slots_no_deadlock(self, tmp_path: Path) -> None:
         """Regression test: more passing candidates than pool slots must not deadlock."""
         from codeflash.optimization.parallel_evaluator import _BehavioralPass
@@ -379,6 +522,9 @@ class TestParallelCandidateEvaluator:
                     test_env={},
                     pytest_cmd_list=[],
                     behavior_test_results=mock_behavior_results,
+                    fto_code="def f(): pass",
+                    helper_codes={},
+                    fto_file_path=Path("/tmp/module.py"),
                 )
             )
 

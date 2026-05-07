@@ -1541,8 +1541,6 @@ class FunctionOptimizer:
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
                 file_path_to_helper_classes=file_path_to_helper_classes,
-                eval_ctx=eval_ctx,
-                exp_type=exp_type,
                 pool_size=pool_size,
             )
 

@@ -46,6 +46,7 @@ class WorktreePool:
         self._send: anyio.abc.ObjectSendStream[WorktreeSlot] | None = None
         self._receive: anyio.abc.ObjectReceiveStream[WorktreeSlot] | None = None
         self._initialized = False
+        self._closed = False
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -93,10 +94,15 @@ class WorktreePool:
         return await self._receive.receive()
 
     async def release(self, slot: WorktreeSlot) -> None:
+        if self._closed:
+            return
         assert self._send is not None
-        await self._send.send(slot)
+        with contextlib.suppress(anyio.ClosedResourceError):
+            await self._send.send(slot)
 
     async def cleanup(self) -> None:
+        self._closed = True
+
         if self._send is not None:
             await self._send.aclose()
         if self._receive is not None:

@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     from codeflash.either import Result
     from codeflash.languages.function_optimizer import CandidateNode, FunctionOptimizer
     from codeflash.models.models import (
-        CandidateEvaluationContext,
         CodeOptimizationContext,
         OptimizedCandidate,
         OptimizedCandidateResult,
@@ -45,6 +44,9 @@ class _BehavioralPass:
     test_env: dict[str, str]
     pytest_cmd_list: list[str]
     behavior_test_results: TestResults
+    fto_code: str
+    helper_codes: dict[Path, str]
+    fto_file_path: Path
 
 
 class ParallelCandidateEvaluator:
@@ -59,6 +61,7 @@ class ParallelCandidateEvaluator:
         self._optimizer = optimizer
         self._pool_size = pool_size
         self._pool: WorktreePool | None = None
+        self._replace_lock = anyio.Lock()
 
     async def evaluate_candidates(
         self,
@@ -92,7 +95,6 @@ class ParallelCandidateEvaluator:
                         code_context,
                         original_code_baseline,
                         original_helper_code,
-                        file_path_to_helper_classes,
                         results,
                         behavioral_passes,
                     )
@@ -119,7 +121,6 @@ class ParallelCandidateEvaluator:
         code_context: CodeOptimizationContext,
         original_code_baseline: OriginalCodeBaseline,
         original_helper_code: dict[Path, str],
-        file_path_to_helper_classes: dict[Path, set[str]],
         results: list[tuple[CandidateNode, Result[OptimizedCandidateResult, EvalFailure] | None]],
         behavioral_passes: list[tuple[int, CandidateNode, _BehavioralPass]],
     ) -> None:
@@ -135,16 +136,10 @@ class ParallelCandidateEvaluator:
                 original_code_baseline=original_code_baseline,
                 original_helper_code=original_helper_code,
             )
-        except BaseException as exc:
-            if not isinstance(exc, Exception):
-                await self._pool.release(slot)
-                raise
-            logger.error(f"Candidate {candidate_node.candidate.optimization_id} raised: {exc}")
-            results[result_index] = (candidate_node, Failure(EvalFailure(message=str(exc))))
+        except BaseException:
             await self._pool.release(slot)
-            return
+            raise
 
-        # Always release slot — Phase 2 re-acquires for benchmarking
         await self._pool.release(slot)
 
         if isinstance(outcome, Failure):
@@ -166,9 +161,11 @@ class ParallelCandidateEvaluator:
         opt = self._optimizer
         fto = opt.function_to_optimize
 
-        candidate_files = await anyio.to_thread.run_sync(
-            self._replace_and_capture, opt, code_context, candidate, original_helper_code
-        )
+        # Serialize main-tree access: replace_and_capture writes/reads/restores shared files
+        async with self._replace_lock:
+            candidate_files = await anyio.to_thread.run_sync(
+                self._replace_and_capture, opt, code_context, candidate, original_helper_code
+            )
 
         if candidate_files is None:
             return Failure(EvalFailure(message="Code replacement failed"))
@@ -259,6 +256,9 @@ class ParallelCandidateEvaluator:
                 test_env=pytest_test_env,
                 pytest_cmd_list=pytest_cmd_list,
                 behavior_test_results=behavior_test_results,
+                fto_code=fto_code,
+                helper_codes=helper_codes,
+                fto_file_path=Path(fto.file_path),
             )
         )
 
@@ -269,7 +269,10 @@ class ParallelCandidateEvaluator:
         opt = self._optimizer
 
         # Re-stage the candidate code in the acquired slot
-        fto = opt.function_to_optimize
+        await slot.write_candidate(bp.fto_file_path, bp.fto_code)
+        for module_path, code in bp.helper_codes.items():
+            await slot.write_candidate(module_path, code)
+
         for file in opt.test_files.test_files:
             if file.benchmarking_file_path and file.benchmarking_file_path.exists():
                 await slot.write_candidate(
@@ -352,11 +355,14 @@ class ParallelCandidateEvaluator:
             fto_code = Path(fto.file_path).read_text("utf-8")
             helper_codes = {Path(p): Path(p).read_text("utf-8") for p in original_helper_code}
             return fto_code, helper_codes
-        except (ValueError, SyntaxError, AttributeError) as e:
+        except Exception as e:
             logger.error(f"Code replacement failed: {e}")
             return None
         finally:
-            opt.write_code_and_helpers(opt.function_to_optimize_source_code, original_helper_code, fto.file_path)
+            try:
+                opt.write_code_and_helpers(opt.function_to_optimize_source_code, original_helper_code, fto.file_path)
+            except Exception as restore_err:
+                logger.error(f"Failed to restore main tree after code replacement: {restore_err}")
 
 
 def run_parallel_evaluation(
@@ -366,8 +372,6 @@ def run_parallel_evaluation(
     original_code_baseline: OriginalCodeBaseline,
     original_helper_code: dict[Path, str],
     file_path_to_helper_classes: dict[Path, set[str]],
-    eval_ctx: CandidateEvaluationContext,
-    exp_type: str,
     pool_size: int = 4,
 ) -> tuple[list[tuple[CandidateNode, Result[OptimizedCandidateResult, EvalFailure] | None]], list, list]:
     """Entry point: run parallel candidate evaluation from sync code via anyio.
