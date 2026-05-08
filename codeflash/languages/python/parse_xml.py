@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from junitparser.xunit2 import JUnitXml
 
@@ -48,7 +48,7 @@ matches_re_end = re.compile(
 )
 
 
-def _parse_func(file_path: Path):
+def _parse_func(file_path: Path) -> Any:
     from lxml.etree import XMLParser, parse
 
     xml_parser = XMLParser(huge_tree=True)
@@ -59,13 +59,22 @@ def parse_python_test_xml(
     test_xml_file_path: Path,
     test_files: TestFiles,
     test_config: TestConfig,
-    run_result: subprocess.CompletedProcess | None = None,
+    run_result: subprocess.CompletedProcess[str] | None = None,
 ) -> TestResults:
     from codeflash.verification.parse_test_output import resolve_test_file_from_class_path
 
     test_results = TestResults()
     if not test_xml_file_path.exists():
-        logger.warning(f"No test results for {test_xml_file_path} found.")
+        if run_result is not None and run_result.returncode != 0:
+            stderr_snippet = (run_result.stderr or "")[:500]
+            stdout_snippet = (run_result.stdout or "")[:500]
+            logger.warning(
+                f"No test results for {test_xml_file_path} found. "
+                f"Subprocess exited with code {run_result.returncode}.\n"
+                f"stdout: {stdout_snippet}\nstderr: {stderr_snippet}"
+            )
+        else:
+            logger.warning(f"No test results for {test_xml_file_path} found.")
         console.rule()
         return test_results
     try:
@@ -87,12 +96,7 @@ def parse_python_test_xml(
             ):
                 logger.info("Test failed to load, skipping it.")
                 if run_result is not None:
-                    if isinstance(run_result.stdout, str) and isinstance(run_result.stderr, str):
-                        logger.info(f"Test log - STDOUT : {run_result.stdout} \n STDERR : {run_result.stderr}")
-                    else:
-                        logger.info(
-                            f"Test log - STDOUT : {run_result.stdout.decode()} \n STDERR : {run_result.stderr.decode()}"
-                        )
+                    logger.info(f"Test log - STDOUT : {run_result.stdout} \n STDERR : {run_result.stderr}")
                 return test_results
 
             test_class_path = testcase.classname
@@ -159,7 +163,7 @@ def parse_python_test_xml(
             sys_stdout = testcase.system_out or ""
 
             begin_matches = list(matches_re_start.finditer(sys_stdout))
-            end_matches: dict[tuple, re.Match] = {}
+            end_matches: dict[tuple[str, ...], re.Match[str]] = {}
             for match in matches_re_end.finditer(sys_stdout):
                 groups = match.groups()
                 if len(groups[5].split(":")) > 1:
@@ -234,11 +238,5 @@ def parse_python_test_xml(
             f"Tests '{[test_file.original_file_path for test_file in test_files.test_files]}' failed to run, skipping"
         )
         if run_result is not None:
-            stdout, stderr = "", ""
-            try:
-                stdout = run_result.stdout.decode()
-                stderr = run_result.stderr.decode()
-            except AttributeError:
-                stdout = run_result.stderr
-            logger.debug(f"Test log - STDOUT : {stdout} \n STDERR : {stderr}")
+            logger.debug(f"Test log - STDOUT : {run_result.stdout} \n STDERR : {run_result.stderr}")
     return test_results
