@@ -429,13 +429,16 @@ class TestFile(BaseModel):
 
 class TestFiles(BaseModel):
     test_files: list[TestFile]
+    _seen_paths: set[Path] = PrivateAttr(default_factory=set)
+
+    def model_post_init(self, __context: Any, /) -> None:
+        self._seen_paths = {tf.instrumented_behavior_file_path for tf in self.test_files}
 
     def add(self, test_file: TestFile) -> None:
-        if test_file not in self.test_files:
+        key = test_file.instrumented_behavior_file_path
+        if key not in self._seen_paths:
+            self._seen_paths.add(key)
             self.test_files.append(test_file)
-        else:
-            msg = "Test file already exists in the list"
-            raise ValueError(msg)
 
     def get_by_original_file_path(self, file_path: Path) -> TestFile | None:
         normalized = self._normalize_path_for_comparison(file_path)
