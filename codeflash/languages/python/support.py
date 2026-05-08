@@ -15,11 +15,11 @@ from codeflash.languages.base import (
     CodeContext,
     FunctionFilterCriteria,
     HelperFunction,
-    Language,
     ReferenceInfo,
     TestInfo,
     TestResult,
 )
+from codeflash.languages.language_enum import Language
 from codeflash.languages.registry import register_language
 from codeflash.models.function_types import FunctionParent
 
@@ -48,8 +48,8 @@ def function_sources_to_helpers(sources: list[FunctionSource]) -> list[HelperFun
             qualified_name=fs.qualified_name,
             file_path=fs.file_path,
             source_code=fs.source_code,
-            start_line=fs.jedi_definition.line if fs.jedi_definition else 1,
-            end_line=fs.jedi_definition.line if fs.jedi_definition else 1,
+            start_line=getattr(getattr(fs, "jedi_definition", None), "line", 1),
+            end_line=getattr(getattr(fs, "jedi_definition", None), "line", 1),
         )
         for fs in sources
     ]
@@ -119,7 +119,7 @@ class FunctionVisitor(cst.CSTVisitor):
             )
 
 
-@register_language
+@register_language  # type: ignore[arg-type]  # PythonSupport satisfies LanguageSupport protocol structurally
 class PythonSupport:
     """Python language support implementation.
 
@@ -214,6 +214,7 @@ class PythonSupport:
     ) -> Any:
         from codeflash.verification.coverage_utils import CoverageUtils
 
+        assert coverage_config_file is not None
         return CoverageUtils.load_from_sqlite_database(
             database_path=coverage_database_file,
             config_path=coverage_config_file,
@@ -854,7 +855,7 @@ class PythonSupport:
         candidate_results_path: Path,
         project_root: Path | None = None,
         project_classpath: str | None = None,
-    ) -> tuple[bool, list]:
+    ) -> tuple[bool, list[Any]]:
         """Compare test results between original and candidate code.
 
         Args:
@@ -1017,7 +1018,7 @@ class PythonSupport:
         # This is handled through the existing infrastructure
         return True
 
-    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict:
+    def parse_line_profile_results(self, line_profiler_output_file: Path) -> dict[str, Any]:
         """Parse line profiler output for Python.
 
         Args:
@@ -1078,7 +1079,7 @@ class PythonSupport:
         from codeflash.code_utils.config_consts import TOTAL_LOOPING_TIME_EFFECTIVE
         from codeflash.languages.python.static_analysis.coverage_utils import prepare_coverage_files
         from codeflash.languages.python.test_runner import execute_test_subprocess
-        from codeflash.models.models import TestType
+        from codeflash.models.test_type import TestType
 
         blocklisted_plugins = ["benchmark", "codspeed", "xdist", "sugar"]
 
@@ -1110,7 +1111,7 @@ class PythonSupport:
             common_pytest_args.append(f"--timeout={timeout}")
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
-        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
 
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
@@ -1137,14 +1138,7 @@ class PythonSupport:
                     shlex.split(f"{SAFE_SYS_EXECUTABLE} -m coverage erase"), cwd=cwd, env=pytest_test_env, timeout=30
                 )
                 logger.debug(cov_erase)
-            coverage_cmd = [
-                SAFE_SYS_EXECUTABLE,
-                "-m",
-                "coverage",
-                "run",
-                f"--rcfile={coverage_config_file.as_posix()}",
-                "-m",
-            ]
+            coverage_cmd = [SAFE_SYS_EXECUTABLE, "-m", "coverage", "run", f"--rcfile={coverage_config_file}", "-m"]
             coverage_cmd.extend(self.pytest_cmd_tokens(IS_POSIX))
 
             blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins if plugin != "cov"]
@@ -1201,7 +1195,7 @@ class PythonSupport:
             pytest_args.append(f"--timeout={timeout}")
 
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
-        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
@@ -1243,7 +1237,7 @@ class PythonSupport:
         if timeout is not None:
             pytest_args.append(f"--timeout={timeout}")
         result_file_path = get_run_tmp_file(Path("pytest_results.xml"))
-        result_args = [f"--junitxml={result_file_path.as_posix()}", "-o", "junit_logging=all"]
+        result_args = [f"--junitxml={result_file_path}", "-o", "junit_logging=all"]
         pytest_test_env = test_env.copy()
         pytest_test_env["PYTEST_PLUGINS"] = "codeflash.verification.pytest_plugin"
         blocklist_args = [f"-p no:{plugin}" for plugin in blocklisted_plugins]
@@ -1258,7 +1252,7 @@ class PythonSupport:
 
     def generate_concolic_tests(
         self, test_cfg: Any, project_root: Path, function_to_optimize: FunctionToOptimize, function_to_optimize_ast: Any
-    ) -> tuple[dict, str]:
+    ) -> tuple[dict[str, Any], str]:
         import ast
         import importlib.util
         import subprocess
@@ -1281,7 +1275,7 @@ class PythonSupport:
         crosshair_available = importlib.util.find_spec("crosshair") is not None
 
         start_time = time.perf_counter()
-        function_to_concolic_tests: dict = {}
+        function_to_concolic_tests: dict[str, Any] = {}
         concolic_test_suite_code = ""
 
         if not crosshair_available:
