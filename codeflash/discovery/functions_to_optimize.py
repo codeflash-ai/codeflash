@@ -176,7 +176,9 @@ def get_files_for_language(
     return files
 
 
-def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bool, str | None]:
+def _is_js_ts_function_exported(
+    file_path: Path, function_name: str, source: str | None = None
+) -> tuple[bool, str | None]:
     """Check if a JavaScript/TypeScript function is exported from its module.
 
     For JS/TS, functions that are not exported cannot be imported by tests,
@@ -185,6 +187,7 @@ def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bo
     Args:
         file_path: Path to the source file.
         function_name: Name of the function to check.
+        source: Pre-read file content. If None, reads from disk.
 
     Returns:
         Tuple of (is_exported, export_name). export_name may be 'default' for default exports.
@@ -193,16 +196,16 @@ def _is_js_ts_function_exported(file_path: Path, function_name: str) -> tuple[bo
     from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
     try:
-        source = read_file_cached(file_path)
+        if source is None:
+            source = read_file_cached(file_path)
         analyzer = get_analyzer_for_file(file_path)
         return analyzer.is_function_exported(source, function_name)
     except Exception as e:
         logger.debug(f"Failed to check export status for {function_name}: {e}")
-        # Return True to avoid blocking in case of errors
         return True, None
 
 
-def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: str) -> bool:
+def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: str, source: str | None = None) -> bool:
     """Check if a JS/TS function exists in the file but is not exported.
 
     Returns True only if the function name is found as a defined function
@@ -211,7 +214,8 @@ def _is_js_ts_function_exists_but_not_exported(file_path: Path, function_name: s
     from codeflash.languages.javascript.treesitter import get_analyzer_for_file
 
     try:
-        source = read_file_cached(file_path)
+        if source is None:
+            source = read_file_cached(file_path)
         analyzer = get_analyzer_for_file(file_path)
         all_funcs = analyzer.find_functions(
             source, include_methods=True, include_arrow_functions=True, require_name=True
@@ -258,6 +262,13 @@ def get_functions_to_optimize(
             console.rule()
             file = Path(file) if isinstance(file, str) else file
             functions = find_all_functions_in_file(file)
+            # Source already cached by find_all_functions_in_file above
+            _js_ts_source: str | None = None
+            if only_get_this_function is not None and is_language_supported(file):
+                _lang = get_language_support(file)
+                if _lang.language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
+                    with contextlib.suppress(Exception):
+                        _js_ts_source = read_file_cached(file)
             if only_get_this_function is not None:
                 split_function = only_get_this_function.split(".")
                 if len(split_function) > 2:
@@ -282,15 +293,13 @@ def get_functions_to_optimize(
                         return functions, 0, None
 
                     # For JS/TS: check if the function exists but is not exported
-                    if is_language_supported(file):
-                        lang_support = get_language_support(file)
-                        if lang_support.language in (Language.JAVASCRIPT, Language.TYPESCRIPT):
-                            if _is_js_ts_function_exists_but_not_exported(file, only_function_name):
-                                exit_with_message(
-                                    f"Function '{only_function_name}' exists in {file} but is not exported.\n"
-                                    f"In JavaScript/TypeScript, only exported functions can be optimized.\n"
-                                    f"Add: export {{ {only_function_name} }}"
-                                )
+                    if _js_ts_source is not None:
+                        if _is_js_ts_function_exists_but_not_exported(file, only_function_name, source=_js_ts_source):
+                            exit_with_message(
+                                f"Function '{only_function_name}' exists in {file} but is not exported.\n"
+                                f"In JavaScript/TypeScript, only exported functions can be optimized.\n"
+                                f"Add: export {{ {only_function_name} }}"
+                            )
 
                     found = closest_matching_file_function_name(only_get_this_function, functions)
                     if found is not None:
@@ -317,7 +326,7 @@ def get_functions_to_optimize(
                         # It's a standalone function - check if the function is exported
                         name_to_check = found_function.function_name
 
-                    is_exported, _ = _is_js_ts_function_exported(file, name_to_check)
+                    is_exported, _ = _is_js_ts_function_exported(file, name_to_check, source=_js_ts_source)
                     if not is_exported:
                         if found_function.parents:
                             logger.debug(
