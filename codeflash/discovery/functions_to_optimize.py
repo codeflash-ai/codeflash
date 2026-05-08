@@ -197,7 +197,8 @@ def _find_all_functions_via_language_support(file_path: Path) -> dict[Path, list
         lang_support = get_language_support(file_path)
         require_return = lang_support.language != Language.JAVA
         criteria = FunctionFilterCriteria(require_return=require_return)
-        functions[file_path] = lang_support.discover_functions(file_path, criteria)
+        source = file_path.read_text(encoding="utf-8")
+        functions[file_path] = lang_support.discover_functions(source, file_path, criteria)
     except Exception as e:
         logger.debug(f"Failed to discover functions in {file_path}: {e}")
 
@@ -226,7 +227,9 @@ def get_functions_to_optimize(
         if optimize_all:
             logger.info("!lsp|Finding all functions in the module '%s'…", optimize_all)
             console.rule()
-            functions = get_all_files_and_functions(Path(optimize_all), ignore_paths)
+            functions = get_all_files_and_functions(
+                Path(optimize_all), ignore_paths, tests_root=test_cfg.tests_root, module_root=module_root
+            )
         elif replay_test:
             functions, trace_file_path = get_all_replay_test_functions(
                 replay_test=replay_test, test_cfg=test_cfg, project_root_path=project_root
@@ -317,7 +320,12 @@ def get_functions_to_optimize(
             logger.info("Finding all functions modified in the current git diff ...")
             console.rule()
             ph("cli-optimizing-git-diff")
-            functions = get_functions_within_git_diff(uncommitted_changes=False)
+            functions = get_functions_within_git_diff(
+                uncommitted_changes=False,
+                tests_root=test_cfg.tests_root,
+                ignore_paths=ignore_paths,
+                module_root=module_root,
+            )
         filtered_modified_functions, functions_count = filter_functions(
             functions, test_cfg.tests_root, ignore_paths, project_root, module_root, previous_checkpoint_functions
         )
@@ -326,9 +334,16 @@ def get_functions_to_optimize(
         return filtered_modified_functions, functions_count, trace_file_path
 
 
-def get_functions_within_git_diff(uncommitted_changes: bool) -> dict[Path, list[FunctionToOptimize]]:
+def get_functions_within_git_diff(
+    uncommitted_changes: bool,
+    tests_root: Path | None = None,
+    ignore_paths: list[Path] | None = None,
+    module_root: Path | None = None,
+) -> dict[Path, list[FunctionToOptimize]]:
     modified_lines: dict[str, list[int]] = get_git_diff(uncommitted_changes=uncommitted_changes)
-    return get_functions_within_lines(modified_lines)
+    return get_functions_within_lines(
+        modified_lines, tests_root=tests_root, ignore_paths=ignore_paths, module_root=module_root
+    )
 
 
 def closest_matching_file_function_name(
@@ -406,12 +421,20 @@ def get_functions_inside_a_commit(commit_hash: str) -> dict[Path, list[FunctionT
     return get_functions_within_lines(modified_lines)
 
 
-def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[Path, list[FunctionToOptimize]]:
+def get_functions_within_lines(
+    modified_lines: dict[str, list[int]],
+    tests_root: Path | None = None,
+    ignore_paths: list[Path] | None = None,
+    module_root: Path | None = None,
+) -> dict[Path, list[FunctionToOptimize]]:
     functions: dict[Path, list[FunctionToOptimize]] = {}
     for path_str, lines_in_file in modified_lines.items():
         path = Path(path_str)
         if not path.exists():
             continue
+        if tests_root is not None and module_root is not None:
+            if not filter_files_optimized(path, tests_root, ignore_paths or [], module_root):
+                continue
         all_functions = find_all_functions_in_file(path)
         functions[path] = [
             func
@@ -424,7 +447,11 @@ def get_functions_within_lines(modified_lines: dict[str, list[int]]) -> dict[Pat
 
 
 def get_all_files_and_functions(
-    module_root_path: Path, ignore_paths: list[Path], language: Language | None = None
+    module_root_path: Path,
+    ignore_paths: list[Path],
+    language: Language | None = None,
+    tests_root: Path | None = None,
+    module_root: Path | None = None,
 ) -> dict[Path, list[FunctionToOptimize]]:
     """Get all optimizable functions from files in the module root.
 
@@ -432,6 +459,8 @@ def get_all_files_and_functions(
         module_root_path: Root path to search for source files.
         ignore_paths: List of paths to ignore.
         language: Optional specific language to filter for. If None, includes all supported languages.
+        tests_root: Test root path for prefiltering files before reading (avoids unnecessary I/O).
+        module_root: Module root path for prefiltering files before reading.
 
     Returns:
         Dictionary mapping file paths to lists of FunctionToOptimize.
@@ -439,6 +468,9 @@ def get_all_files_and_functions(
     """
     functions: dict[Path, list[FunctionToOptimize]] = {}
     for file_path in get_files_for_language(module_root_path, ignore_paths, language):
+        if tests_root is not None and module_root is not None:
+            if not filter_files_optimized(file_path, tests_root, ignore_paths, module_root):
+                continue
         functions.update(find_all_functions_in_file(file_path).items())
     # Randomize the order of the files to optimize to avoid optimizing the same file in the same order every time.
     # Helpful if an optimize-all run is stuck and we restart it.
