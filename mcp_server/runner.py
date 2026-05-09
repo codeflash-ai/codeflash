@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -53,11 +54,62 @@ def _build_test_config(project_root: Path, tests_dir: Path | None = None) -> Tes
     return TestConfig(tests_root=effective_tests_dir, project_root_path=project_root, tests_project_rootdir=effective_tests_dir)
 
 
-def _find_call_positions(test_path: Path, function_name: str) -> list:
-    """Scan a test file's AST to find all call sites of the target function."""
+def _build_fallback_function_to_optimize(module_path: Path, function_name: str, language: str):
+    from codeflash.models.function_types import FunctionParent, FunctionToOptimize
+
+    qualified_name_parts = function_name.split(".")
+    simple_name = qualified_name_parts[-1]
+    parents = [FunctionParent(name=part, type="ClassDef") for part in qualified_name_parts[:-1]]
+    return FunctionToOptimize(
+        function_name=simple_name,
+        file_path=module_path,
+        parents=parents,
+        is_method=bool(parents),
+        language=language,
+    )
+
+
+def _resolve_function_to_optimize(lang_support: object, module_path: str, function_name: str, language: str):
+    from codeflash.languages.base import FunctionFilterCriteria
+
+    source_path = Path(module_path).resolve()
+    fallback = _build_fallback_function_to_optimize(source_path, function_name, language)
+
+    try:
+        source = source_path.read_text(encoding="utf-8")
+    except OSError:
+        return fallback
+
+    criteria = FunctionFilterCriteria(require_return=False, require_export=False)
+    discovered_functions = lang_support.discover_functions(source, source_path, criteria)
+    if not discovered_functions:
+        return fallback
+
+    requested_name = function_name.rsplit(".", 1)[-1]
+
+    qualified_matches = [func for func in discovered_functions if func.qualified_name == function_name]
+    if len(qualified_matches) == 1:
+        return qualified_matches[0]
+
+    top_level_matches = [func for func in discovered_functions if func.qualified_name == requested_name]
+    if len(top_level_matches) == 1:
+        return top_level_matches[0]
+
+    simple_matches = [func for func in discovered_functions if func.function_name == requested_name]
+    if len(simple_matches) == 1:
+        return simple_matches[0]
+
+    return fallback
+
+
+def _find_call_positions(test_path: Path, function_name: str, language: str) -> list:
+    """Scan a Python test file's AST to find all call sites of the target function."""
     import ast
 
     from codeflash.models.models import CodePosition
+
+    if language != "python":
+        return []
 
     try:
         source = test_path.read_text(encoding="utf-8")
@@ -75,6 +127,15 @@ def _find_call_positions(test_path: Path, function_name: str) -> list:
             positions.append(CodePosition(line_no=node.lineno, col_no=node.col_offset))
 
     return positions
+
+
+def _invoke_with_optional_test_framework(run_callable: object, *, test_framework: str | None = None, **kwargs: object):
+    try:
+        if test_framework is not None and "test_framework" in inspect.signature(run_callable).parameters:
+            kwargs["test_framework"] = test_framework
+    except (TypeError, ValueError):
+        pass
+    return run_callable(**kwargs)
 
 
 class _InstrumentedFiles:
@@ -100,16 +161,15 @@ class _InstrumentedFiles:
     def __enter__(self) -> list[str]:
         from codeflash.languages.current import set_current_language
         from codeflash.languages.registry import get_language_support
-        from codeflash.models.function_types import FunctionToOptimize
 
         set_current_language(self.language)
         lang_support = get_language_support(self.language)
 
-        func_to_optimize = FunctionToOptimize(
+        func_to_optimize = _resolve_function_to_optimize(
+            lang_support=lang_support,
+            module_path=self.module_path,
             function_name=self.function_name,
-            file_path=Path(self.module_path),
-            parents=(),
-            qualified_name=self.function_name,
+            language=self.language,
         )
 
         instrument_mode = "behavior" if self.mode == TestingMode.BEHAVIORAL else "performance"
@@ -118,8 +178,8 @@ class _InstrumentedFiles:
         for test_file in self.test_file_paths:
             test_path = Path(test_file).resolve()
 
-            call_positions = _find_call_positions(test_path, self.function_name)
-            if not call_positions:
+            call_positions = _find_call_positions(test_path, func_to_optimize.function_name, self.language)
+            if self.language == "python" and not call_positions:
                 instrumented_paths.append(test_file)
                 continue
 
@@ -157,6 +217,7 @@ def run_and_parse(
     target_duration_seconds: float = 0.5,
     function_name: str | None = None,
     module_path: str | None = None,
+    test_framework: str | None = None,
 ) -> tuple[TestResults, subprocess.CompletedProcess[str]]:
     from codeflash.languages.current import set_current_language
     from codeflash.languages.registry import get_language_support
@@ -172,11 +233,19 @@ def run_and_parse(
         test_files_obj = _build_test_files(effective_files, mode)
 
         if mode == TestingMode.BEHAVIORAL:
-            result_file_path, run_result, _, _ = lang_support.run_behavioral_tests(
-                test_paths=test_files_obj, test_env=test_env, cwd=project_root, timeout=timeout, project_root=project_root
+            result_file_path, run_result, _, _ = _invoke_with_optional_test_framework(
+                lang_support.run_behavioral_tests,
+                test_framework=test_framework,
+                test_paths=test_files_obj,
+                test_env=test_env,
+                cwd=project_root,
+                timeout=timeout,
+                project_root=project_root,
             )
         else:
-            result_file_path, run_result = lang_support.run_benchmarking_tests(
+            result_file_path, run_result = _invoke_with_optional_test_framework(
+                lang_support.run_benchmarking_tests,
+                test_framework=test_framework,
                 test_paths=test_files_obj,
                 test_env=test_env,
                 cwd=project_root,

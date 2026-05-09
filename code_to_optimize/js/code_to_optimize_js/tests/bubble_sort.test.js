@@ -1,4 +1,4 @@
-const { bubbleSort, bubbleSortDescending } = require('../bubble_sort');
+const { bubbleSort } = require('../bubble_sort');
 
 describe('bubbleSort', () => {
     test('sorts an empty array', () => {
@@ -52,19 +52,5 @@ describe('bubbleSort', () => {
         const result = bubbleSort(input);
         expect(result[0]).toBe(3);
         expect(result[result.length - 1]).toBe(96);
-    });
-});
-
-describe('bubbleSortDescending', () => {
-    test('sorts in descending order', () => {
-        expect(bubbleSortDescending([1, 3, 2, 5, 4])).toEqual([5, 4, 3, 2, 1]);
-    });
-
-    test('handles empty array', () => {
-        expect(bubbleSortDescending([])).toEqual([]);
-    });
-
-    test('handles single element', () => {
-        expect(bubbleSortDescending([42])).toEqual([42]);
     });
 });

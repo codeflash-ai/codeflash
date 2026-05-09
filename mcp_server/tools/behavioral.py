@@ -17,6 +17,7 @@ def run_behavioral_tests(
     run_id: str | None = None,
     function_name: str | None = None,
     module_path: str | None = None,
+    test_framework: str | None = None,
 ) -> dict[str, Any]:
     run_id = run_id or str(uuid.uuid4())
     project_root_path = Path(project_root).resolve()
@@ -32,6 +33,7 @@ def run_behavioral_tests(
         target_duration_seconds=0.5,  # not used in behavioral mode
         function_name=function_name,
         module_path=module_path,
+        test_framework=test_framework,
     )
 
     conn = get_connection()
@@ -69,13 +71,13 @@ def run_behavioral_tests(
             test_name = f"{inv.id.test_module_path}::{inv.id.test_function_name}"
             errors.append(test_name)
 
-    total_runtime_ns = test_results.total_passed_runtime() if test_results else 0
+    best_summed_runtime_ns = test_results.total_passed_runtime() if test_results else 0
     result = BehavioralRunResult(
         run_id=run_id,
         total_tests=len(test_results),
         passed=sum(1 for r in test_results if r.did_pass),
         failed=sum(1 for r in test_results if not r.did_pass),
-        total_runtime_ns=total_runtime_ns,
+        best_summed_runtime_ns=best_summed_runtime_ns,
         test_results=invocation_results,
         errors=errors,
     )
@@ -85,7 +87,7 @@ def run_behavioral_tests(
         "total_tests": result.total_tests,
         "passed": result.passed,
         "failed": result.failed,
-        "total_runtime_ns": result.total_runtime_ns,
+        "best_summed_runtime_ns": result.best_summed_runtime_ns,
         "test_results": [
             {
                 "name": r.test_function_name,

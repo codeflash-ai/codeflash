@@ -19,6 +19,8 @@ const os = require('os');
 const fs = require('fs');
 const { getCacheDir, getVenvDir, getCodeflashBin, getUvPath } = require('./paths');
 
+const PYTHON_VERSION = '3.12';
+
 // Clean environment without VIRTUAL_ENV so uv doesn't target an activated venv
 const cleanEnv = (() => {
   const env = { ...process.env };
@@ -134,7 +136,13 @@ function installCodeflash(uvBin) {
 
   // Create the venv (or reuse existing)
   try {
-    execSync(`"${uvBin}" venv --python python3.12 --clear "${venvDir}"`, {
+    execSync(`"${uvBin}" python install ${PYTHON_VERSION}`, {
+      stdio: 'inherit',
+      shell: true,
+      env: cleanEnv,
+    });
+
+    execSync(`"${uvBin}" venv --python python${PYTHON_VERSION} --clear "${venvDir}"`, {
       stdio: 'inherit',
       shell: true,
       env: cleanEnv,

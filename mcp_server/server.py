@@ -19,6 +19,7 @@ def run_behavioral_tests(
     run_id: str | None = None,
     function_name: str | None = None,
     module_path: str | None = None,
+    test_framework: str | None = None,
 ) -> dict[str, Any]:
     """Run tests and capture function return values + timing for each test invocation.
 
@@ -39,9 +40,10 @@ def run_behavioral_tests(
         run_id: Identifier for this run. Use descriptive IDs like "baseline-exp-1". Auto-generated UUID if omitted.
         function_name: Name of the function being optimized. When provided with module_path, enables automatic instrumentation of test files to capture return values and precise timing.
         module_path: Absolute path to the source file containing the function being optimized. Required together with function_name for instrumentation.
+        test_framework: Optional test framework override. If omitted, codeflash will try to detect the framework automatically. For Python, the supported value is `pytest`. For JavaScript/TypeScript, supported values are `jest`, `vitest`, and `mocha`. For Java and Go, leave this unset because it is not used.
 
     Returns:
-        run_id, total_tests, passed, failed, total_runtime_ns, test_results (per-test detail), errors.
+        run_id, total_tests, passed, failed, best_summed_runtime_ns, test_results (per-test detail), errors.
 
     """
     from mcp_server.tools.behavioral import run_behavioral_tests as impl
@@ -54,6 +56,7 @@ def run_behavioral_tests(
         run_id=run_id,
         function_name=function_name,
         module_path=module_path,
+        test_framework=test_framework,
     )
 
 
@@ -98,6 +101,7 @@ def run_benchmarking_tests(
     baseline_run_id: str | None = None,
     function_name: str | None = None,
     module_path: str | None = None,
+    test_framework: str | None = None,
 ) -> dict[str, Any]:
     """Run tests in multi-loop mode for stable timing, then compute speedup against a baseline.
 
@@ -132,9 +136,10 @@ def run_benchmarking_tests(
         baseline_run_id: Run ID of a previous benchmark to compare against. Omit for baseline capture.
         function_name: Name of the function being benchmarked. When provided with module_path, enables automatic instrumentation with performance-mode timing capture.
         module_path: Absolute path to the source file containing the function. Required together with function_name.
+        test_framework: Optional test framework override. If omitted, codeflash will try to detect the framework automatically. For Python, the supported value is `pytest`. For JavaScript/TypeScript, supported values are `jest`, `vitest`, and `mocha`. For Java and Go, leave this unset because it is not used.
 
     Returns:
-        run_id, total_runtime_ns, loops_executed, test_results, speedup (null if no baseline_run_id).
+        run_id, best_summed_runtime_ns, loops_executed, test_results, speedup (null if no baseline_run_id).
 
     """
     from mcp_server.tools.benchmarking import run_benchmarking_tests as impl
@@ -151,6 +156,7 @@ def run_benchmarking_tests(
         baseline_run_id=baseline_run_id,
         function_name=function_name,
         module_path=module_path,
+        test_framework=test_framework,
     )
 
 

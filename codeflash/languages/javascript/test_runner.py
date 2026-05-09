@@ -796,6 +796,7 @@ def run_jest_behavioral_tests(
     # Build Jest command
     jest_cmd = [
         "npx",
+        "-y",
         "jest",
         "--reporters=default",
         f"--reporters={CODEFLASH_JEST_REPORTER}",
@@ -1050,6 +1051,7 @@ def run_jest_benchmarking_tests(
     # Build Jest command for performance tests
     jest_cmd = [
         "npx",
+        "-y",
         "jest",
         "--reporters=default",
         f"--reporters={CODEFLASH_JEST_REPORTER}",
@@ -1220,6 +1222,7 @@ def run_jest_line_profile_tests(
     # Build Jest command for line profiling - simple run without benchmarking loops
     jest_cmd = [
         "npx",
+        "-y",
         "jest",
         "--reporters=default",
         f"--reporters={CODEFLASH_JEST_REPORTER}",

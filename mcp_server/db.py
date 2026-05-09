@@ -38,7 +38,7 @@ def _create_tables(conn: sqlite3.Connection) -> None:
             created_at TEXT NOT NULL,
             project_root TEXT NOT NULL,
             test_files TEXT NOT NULL,
-            total_runtime_ns INTEGER,
+            best_summed_runtime_ns INTEGER,
             total_tests INTEGER,
             passed INTEGER,
             failed INTEGER,
@@ -79,7 +79,7 @@ def store_run(
     raw_stdout: str = "",
     raw_stderr: str = "",
 ) -> None:
-    total_runtime_ns = test_results.total_passed_runtime() if test_results else 0
+    best_summed_runtime_ns = test_results.total_passed_runtime() if test_results else 0
     total_tests = len(test_results)
     passed = sum(1 for r in test_results if r.did_pass)
     failed = total_tests - passed
@@ -87,7 +87,7 @@ def store_run(
 
     conn.execute(
         "INSERT INTO runs (run_id, run_type, created_at, project_root, test_files, "
-        "total_runtime_ns, total_tests, passed, failed, loops_executed, raw_stdout, raw_stderr) "
+        "best_summed_runtime_ns, total_tests, passed, failed, loops_executed, raw_stdout, raw_stderr) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             run_id,
@@ -95,7 +95,7 @@ def store_run(
             datetime.now(timezone.utc).isoformat(),
             project_root,
             json.dumps(test_files),
-            total_runtime_ns,
+            best_summed_runtime_ns,
             total_tests,
             passed,
             failed,
@@ -200,7 +200,7 @@ def load_test_results(conn: sqlite3.Connection, run_id: str) -> TestResults:
 
 def load_run_metadata(conn: sqlite3.Connection, run_id: str) -> dict[str, Any] | None:
     row = conn.execute(
-        "SELECT run_type, created_at, project_root, test_files, total_runtime_ns, "
+        "SELECT run_type, created_at, project_root, test_files, best_summed_runtime_ns, "
         "total_tests, passed, failed, loops_executed FROM runs WHERE run_id = ?",
         (run_id,),
     ).fetchone()
@@ -211,7 +211,7 @@ def load_run_metadata(conn: sqlite3.Connection, run_id: str) -> dict[str, Any] |
         "created_at": row[1],
         "project_root": row[2],
         "test_files": json.loads(row[3]),
-        "total_runtime_ns": row[4],
+        "best_summed_runtime_ns": row[4],
         "total_tests": row[5],
         "passed": row[6],
         "failed": row[7],

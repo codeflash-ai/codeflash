@@ -23,7 +23,7 @@ class BehavioralRunResult:
     total_tests: int
     passed: int
     failed: int
-    total_runtime_ns: int
+    best_summed_runtime_ns: int
     test_results: list[TestInvocationResult]
     errors: list[str] = field(default_factory=list)
 
@@ -58,7 +58,7 @@ class SpeedupInfo:
 @dataclass
 class BenchmarkRunResult:
     run_id: str
-    total_runtime_ns: int
+    best_summed_runtime_ns: int
     loops_executed: int
     test_results: list[TestInvocationResult]
     speedup: SpeedupInfo | None = None

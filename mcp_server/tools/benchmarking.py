@@ -26,6 +26,7 @@ def run_benchmarking_tests(
     baseline_run_id: str | None = None,
     function_name: str | None = None,
     module_path: str | None = None,
+    test_framework: str | None = None,
 ) -> dict[str, Any]:
     run_id = run_id or str(uuid.uuid4())
     project_root_path = Path(project_root).resolve()
@@ -41,6 +42,7 @@ def run_benchmarking_tests(
         target_duration_seconds=target_duration_seconds,
         function_name=function_name,
         module_path=module_path,
+        test_framework=test_framework,
     )
 
     conn = get_connection()
@@ -62,7 +64,7 @@ def run_benchmarking_tests(
     finally:
         conn.close()
 
-    total_runtime_ns = test_results.total_passed_runtime() if test_results else 0
+    best_summed_runtime_ns = test_results.total_passed_runtime() if test_results else 0
     loops_executed = test_results.effective_loop_count() if test_results else 0
 
     invocation_results = [
@@ -82,7 +84,7 @@ def run_benchmarking_tests(
 
     result = BenchmarkRunResult(
         run_id=run_id,
-        total_runtime_ns=total_runtime_ns,
+        best_summed_runtime_ns=best_summed_runtime_ns,
         loops_executed=loops_executed,
         test_results=invocation_results,
         speedup=speedup_info,
@@ -90,7 +92,7 @@ def run_benchmarking_tests(
 
     output: dict[str, Any] = {
         "run_id": result.run_id,
-        "total_runtime_ns": result.total_runtime_ns,
+        "best_summed_runtime_ns": result.best_summed_runtime_ns,
         "loops_executed": result.loops_executed,
         "test_results": [
             {
@@ -127,7 +129,7 @@ def _compute_speedup(
     if baseline_meta is None:
         return None
 
-    baseline_runtime_ns = baseline_meta["total_runtime_ns"]
+    baseline_runtime_ns = baseline_meta["best_summed_runtime_ns"]
     candidate_runtime_ns = candidate_results.total_passed_runtime() if candidate_results else 0
 
     if candidate_runtime_ns == 0 or baseline_runtime_ns == 0:
