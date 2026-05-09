@@ -1883,6 +1883,8 @@ class TestGetModulePath:
         Regression test for: ERR_MODULE_NOT_FOUND when importing TypeScript modules
         Trace ID: 08d0e99e-10e6-4ad2-981d-b907e3c068ea
         """
+        from codeflash.languages.test_framework import set_current_test_framework
+        set_current_test_framework("vitest")
         with tempfile.TemporaryDirectory() as tmpdir:
             project_root = Path(tmpdir)
 
