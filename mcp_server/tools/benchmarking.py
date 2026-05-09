@@ -46,23 +46,20 @@ def run_benchmarking_tests(
     )
 
     conn = get_connection()
-    try:
-        store_run(
-            conn=conn,
-            run_id=run_id,
-            run_type="benchmarking",
-            project_root=project_root,
-            test_files=test_files,
-            test_results=test_results,
-            raw_stdout=run_result.stdout or "",
-            raw_stderr=run_result.stderr or "",
-        )
+    store_run(
+        conn=conn,
+        run_id=run_id,
+        run_type="benchmarking",
+        project_root=project_root,
+        test_files=test_files,
+        test_results=test_results,
+        raw_stdout=run_result.stdout or "",
+        raw_stderr=run_result.stderr or "",
+    )
 
-        speedup_info = None
-        if baseline_run_id:
-            speedup_info = _compute_speedup(conn, baseline_run_id, test_results)
-    finally:
-        conn.close()
+    speedup_info = None
+    if baseline_run_id:
+        speedup_info = _compute_speedup(conn, baseline_run_id, test_results)
 
     best_summed_runtime_ns = test_results.total_passed_runtime() if test_results else 0
     loops_executed = test_results.effective_loop_count() if test_results else 0

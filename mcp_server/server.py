@@ -3,10 +3,24 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.server.mixins import lifespan
+
+from mcp_server.db import close_conn
+
+
+@lifespan
+async def app_lifespan(server) -> None:
+    print("codeflash-mcp is up")
+    yield
+    print("shutting dowm the server")
+    close_conn()
+
+
 
 mcp = FastMCP(
     "codeflash-mcp",
     instructions="Run behavioral tests, compare results, and benchmark performance for code optimization.",
+    lifespan=app_lifespan,
 )
 
 

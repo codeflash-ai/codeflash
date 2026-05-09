@@ -7,11 +7,8 @@ from mcp_server.db import get_connection, load_test_results
 
 def compare_test_results(original_run_id: str, candidate_run_id: str, pass_fail_only: bool = False) -> dict[str, Any]:
     conn = get_connection()
-    try:
-        original_results = load_test_results(conn, original_run_id)
-        candidate_results = load_test_results(conn, candidate_run_id)
-    finally:
-        conn.close()
+    original_results = load_test_results(conn, original_run_id)
+    candidate_results = load_test_results(conn, candidate_run_id)
 
     if not original_results:
         return {"error": f"No results found for run_id: {original_run_id}"}

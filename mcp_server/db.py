@@ -14,6 +14,7 @@ from codeflash.models.test_type import TestType
 
 _DEFAULT_DB_PATH = Path.home() / ".codeflash" / "mcp_results.db"
 
+db_conn = None
 
 def get_db_path() -> Path:
     path = Path(os.environ.get("CODEFLASH_MCP_DB_PATH", str(_DEFAULT_DB_PATH)))
@@ -22,12 +23,24 @@ def get_db_path() -> Path:
 
 
 def get_connection() -> sqlite3.Connection:
+    global db_conn
+    if db_conn is not None:
+        return db_conn
     db_path = get_db_path()
+    print(db_path)
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     _create_tables(conn)
+    db_conn = conn
     return conn
+
+
+def close_conn() -> None:
+    global db_conn
+    if db_conn is not None:
+        db_conn.close()
+        db_conn = None
 
 
 def _create_tables(conn: sqlite3.Connection) -> None:

@@ -37,19 +37,16 @@ def run_behavioral_tests(
     )
 
     conn = get_connection()
-    try:
-        store_run(
-            conn=conn,
-            run_id=run_id,
-            run_type="behavioral",
-            project_root=project_root,
-            test_files=test_files,
-            test_results=test_results,
-            raw_stdout=run_result.stdout or "",
-            raw_stderr=run_result.stderr or "",
-        )
-    finally:
-        conn.close()
+    store_run(
+        conn=conn,
+        run_id=run_id,
+        run_type="behavioral",
+        project_root=project_root,
+        test_files=test_files,
+        test_results=test_results,
+        raw_stdout=run_result.stdout or "",
+        raw_stderr=run_result.stderr or "",
+    )
 
     invocation_results = []
     errors = []

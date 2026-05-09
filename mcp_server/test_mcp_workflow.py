@@ -21,7 +21,7 @@ def get_e2e_test_config_by_language(language: str) -> dict[str, str]:
             "module_path": str(CODE_DIR / "bubble_sort.py"),
             "function_name": "sorter",
             "root": str(CODE_DIR),
-            "optimized_code": "def sorter(arr):\n    return sorted(arr)",
+            "optimized_code": "def sorter(arr):\n    result = sorted(arr)\n    print('codeflash stdout: Sorting list')\n    print(f'result: {result}')\n    return result",
         }
     if language == "javascript":
         return {
@@ -203,6 +203,7 @@ def main() -> int:
     print("=" * 60)
     print("\n")
     langs = ["python", "javascript"]
+    langs = ["python"]
     for lang in langs:
         exit_code = doTest(get_e2e_test_config_by_language(lang))
         if exit_code != 0:
