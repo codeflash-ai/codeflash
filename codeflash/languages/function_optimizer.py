@@ -21,7 +21,7 @@ from rich.text import Text
 from rich.tree import Tree
 
 import codeflash.code_utils._libcst_cache  # noqa: F401
-from codeflash.api.aiservice import AiServiceClient, AIServiceRefinerRequest, LocalAiServiceClient
+from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.api.cfapi import add_code_context_hash, create_staging, get_cfapi_base_urls, mark_optimization_success
 from codeflash.benchmarking.utils import process_benchmark_data
 from codeflash.cli_cmds.console import (
@@ -78,6 +78,7 @@ from codeflash.models.models import (
     AdaptiveOptimizedCandidate,
     AIServiceAdaptiveOptimizeRequest,
     AIServiceCodeRepairRequest,
+    AIServiceRefinerRequest,
     BestOptimization,
     CandidateEvaluationContext,
     GeneratedTests,
@@ -1712,7 +1713,9 @@ class FunctionOptimizer:
                 logger.debug(f"Failed to instrument test file {test_file} for performance testing")
                 continue
 
-            # For JS/TS, preserve .test.ts or .spec.ts suffix for Jest pattern matching
+            # Preserve language-specific test file naming conventions:
+            # JS/TS: .test.ts / .spec.ts for Jest pattern matching
+            # Go: _test.go required by `go test`
             def get_instrumented_path(original_path: str, suffix: str) -> Path:
                 path_obj = Path(original_path)
                 stem = path_obj.stem
@@ -1724,6 +1727,9 @@ class FunctionOptimizer:
                 elif ".spec" in stem:
                     base, _ = stem.rsplit(".spec", 1)
                     new_stem = f"{base}{suffix}.spec"
+                elif stem.endswith("_test") and ext == ".go":
+                    base = stem.removesuffix("_test")
+                    new_stem = f"{base}{suffix}_test"
                 else:
                     new_stem = f"{stem}{suffix}"
 

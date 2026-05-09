@@ -1,0 +1,8 @@
+{
+  "name": "tessl/npm-typescript",
+  "version": "5.9.1",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/typescript@5.9.3",
+  "summary": "TypeScript is a language for application-scale JavaScript development with optional static typing and powerful compiler APIs",
+  "private": false
+}

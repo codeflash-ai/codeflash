@@ -1,0 +1,7 @@
+{
+  "name": "tessl/maven-com-google-code-gson--gson",
+  "version": "2.13.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:maven/com.google.code.gson/gson@2.13.1",
+  "summary": "Java library for converting Java objects to JSON and vice-versa."
+}

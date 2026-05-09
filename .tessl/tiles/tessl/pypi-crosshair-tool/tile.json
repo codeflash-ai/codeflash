@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-crosshair-tool",
+  "version": "0.0.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/crosshair-tool@0.0.95",
+  "summary": "Analyze Python code for correctness using symbolic execution and SMT solving to automatically find counterexamples for functions with type annotations and contracts."
+}

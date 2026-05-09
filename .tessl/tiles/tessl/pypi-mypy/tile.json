@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-mypy",
+  "version": "1.17.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/mypy@1.17.1",
+  "summary": "Optional static typing for Python with powerful type system and gradual typing support"
+}

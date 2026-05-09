@@ -1643,12 +1643,13 @@ def codeflash_concurrency_async(func):
         test_class_name = os.environ.get("CODEFLASH_TEST_CLASS", "")
         test_function = os.environ.get("CODEFLASH_TEST_FUNCTION", "")
         loop_index = os.environ.get("CODEFLASH_LOOP_INDEX", "0")
+        sequential_time = 0
         gc.disable()
         try:
-            seq_start = time.perf_counter_ns()
             for _ in range(concurrency_factor):
+                _t0 = time.perf_counter_ns()
                 result = await func(*args, **kwargs)
-            sequential_time = time.perf_counter_ns() - seq_start
+                sequential_time += time.perf_counter_ns() - _t0
         finally:
             gc.enable()
         gc.disable()

@@ -1,0 +1,7 @@
+{
+  "name": "tessl/maven-org-jacoco--org-jacoco-agent",
+  "version": "0.8.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:maven/org.jacoco/org.jacoco.agent@0.8.13",
+  "summary": "JaCoCo Agent provides programmatic access to the JaCoCo runtime agent JAR file for Java code coverage analysis."
+}

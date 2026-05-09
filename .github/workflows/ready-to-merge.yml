@@ -1,0 +1,8 @@
+name: Ready to Merge
+
+on:
+  pull_request:
+
+jobs:
+  ready:
+    uses: codeflash-ai/github-workflows/.github/workflows/ready-to-merge.yml@main

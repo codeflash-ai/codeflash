@@ -1,0 +1,7 @@
+{
+  "name": "tessl/npm-babel--core",
+  "version": "7.26.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/@babel/core@7.26.10",
+  "summary": "Babel compiler core providing programmatic APIs for JavaScript code transformation, parsing, and configuration."
+}

@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-memray",
+  "version": "1.18.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/memray@1.18.0",
+  "summary": "A memory profiler for Python applications"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-libcst",
+  "version": "1.8.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/libcst@1.8.2",
+  "summary": "A concrete syntax tree with AST-like properties for Python 3.0 through 3.13 programs."
+}

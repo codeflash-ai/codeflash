@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-inquirer",
+  "version": "3.4.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/inquirer@3.4.1",
+  "summary": "Collection of common interactive command line user interfaces, based on Inquirer.js"
+}

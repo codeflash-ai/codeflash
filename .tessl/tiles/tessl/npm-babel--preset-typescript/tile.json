@@ -1,0 +1,7 @@
+{
+  "name": "tessl/npm-babel--preset-typescript",
+  "version": "7.27.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/@babel/preset-typescript@7.27.1",
+  "summary": "Babel preset for TypeScript compilation through Babel's plugin pipeline"
+}

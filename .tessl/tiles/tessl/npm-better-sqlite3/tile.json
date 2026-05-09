@@ -1,0 +1,7 @@
+{
+  "name": "tessl/npm-better-sqlite3",
+  "version": "12.2.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:npm/better-sqlite3@12.2.0",
+  "summary": "The fastest and simplest library for SQLite3 in Node.js with synchronous API for high-performance database operations"
+}

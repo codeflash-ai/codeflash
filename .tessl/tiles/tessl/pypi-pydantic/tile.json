@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-pydantic",
+  "version": "2.11.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/pydantic@2.11.7",
+  "summary": "Data validation using Python type hints"
+}

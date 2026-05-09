@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-platformdirs",
+  "version": "4.4.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/platformdirs@4.4.0",
+  "summary": "A small Python package for determining appropriate platform-specific dirs, e.g. a user data dir."
+}

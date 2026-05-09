@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-attrs",
+  "version": "25.3.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/attrs@25.3.0",
+  "summary": "Python classes without boilerplate, providing declarative attribute definitions that automatically generate dunder methods."
+}

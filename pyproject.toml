@@ -27,6 +27,7 @@ dependencies = [
     "tree-sitter-typescript>=0.23.2",
     "tree-sitter-java>=0.23.5",
     "tree-sitter-groovy>=0.1.2",
+    "tree-sitter-go>=0.23.0",
     "tree-sitter-kotlin>=1.1.0",
     "pytest-timeout>=2.4.0",
     "tomlkit>=0.14.0",
@@ -220,8 +221,12 @@ plugins = ["pydantic.mypy"]
 exclude = ["tests/", "code_to_optimize/", "pie_test_set/", "experiments/"]
 
 [[tool.mypy.overrides]]
-module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba"]
+module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba", "dill"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["codeflash.code_utils.codeflash_wrap_decorator", "codeflash.code_utils.instrument_existing_tests", "codeflash.optimization.optimizer"]
+disable_error_code = ["attr-defined", "return-value", "no-untyped-call", "no-untyped-def", "arg-type", "assignment", "var-annotated", "no-any-return", "call-overload", "union-attr", "unreachable", "list-item"]
 
 [tool.pydantic-mypy]
 init_forbid_extra = true

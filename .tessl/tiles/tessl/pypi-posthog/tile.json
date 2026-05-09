@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-posthog",
+  "version": "6.7.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/posthog@6.7.2",
+  "summary": "Integrate PostHog into any python application."
+}

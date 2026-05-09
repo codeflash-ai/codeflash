@@ -1,0 +1,7 @@
+{
+  "name": "tessl/pypi-lxml",
+  "version": "6.0.0",
+  "docs": "docs/index.md",
+  "describes": "pkg:pypi/lxml@6.0.1",
+  "summary": "Powerful and Pythonic XML processing library combining libxml2/libxslt with the ElementTree API."
+}

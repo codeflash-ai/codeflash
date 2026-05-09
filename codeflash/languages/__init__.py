@@ -31,6 +31,7 @@ from codeflash.languages.base import (
 from codeflash.languages.current import (
     current_language,
     current_language_support,
+    is_go,
     is_java,
     is_javascript,
     is_python,
@@ -83,6 +84,10 @@ def __getattr__(name: str):
         from codeflash.languages.java.support import JavaSupport
 
         return JavaSupport
+    if name == "GoSupport":
+        from codeflash.languages.golang.support import GoSupport
+
+        return GoSupport
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)
 
@@ -106,6 +111,7 @@ __all__ = [
     "get_language_support",
     "get_supported_extensions",
     "get_supported_languages",
+    "is_go",
     "is_java",
     "is_javascript",
     "is_jest",

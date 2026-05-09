@@ -29,6 +29,7 @@ from codeflash.cli_cmds.init_config import (
     get_suggestions,
     should_modify_pyproject_toml,
 )
+from codeflash.cli_cmds.init_go import init_go_project
 from codeflash.cli_cmds.init_java import init_java_project
 from codeflash.cli_cmds.init_javascript import ProjectLanguage, detect_project_language, init_js_project
 from codeflash.code_utils.code_utils import validate_relative_directory_path
@@ -60,6 +61,10 @@ def init_codeflash() -> None:
 
         # Detect project language
         project_language = detect_project_language()
+
+        if project_language == ProjectLanguage.GO:
+            init_go_project()
+            return
 
         if project_language == ProjectLanguage.JAVA:
             init_java_project()
