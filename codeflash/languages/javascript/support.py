@@ -2059,9 +2059,9 @@ class JavaScriptSupport:
             generated_test_source, project_module_system, test_cfg.tests_project_rootdir
         )
 
-        # Add .js extensions to relative imports for ESM projects
-        # TypeScript + ESM requires explicit .js extensions even for .ts source files
-        if project_module_system == ModuleSystem.ES_MODULE:
+        # Add .js extensions to relative imports for ESM projects — but NOT for Jest,
+        # which resolves .ts imports without .js extensions via its transform/resolver.
+        if project_module_system == ModuleSystem.ES_MODULE and test_cfg.test_framework != "jest":
             from codeflash.languages.javascript.module_system import add_js_extensions_to_relative_imports
 
             generated_test_source = add_js_extensions_to_relative_imports(generated_test_source)
@@ -2264,10 +2264,13 @@ class JavaScriptSupport:
             # (e.g. \t → tab, \n → newline) and would break imports on Windows.
             rel_path = os.path.relpath(str(source_without_ext), str(tests_root_abs)).replace("\\", "/")
 
-            # For ESM, add .js extension (TypeScript convention)
-            # TypeScript requires imports to reference the OUTPUT file extension (.js),
-            # even when the source file is .ts. This is required for Node.js ESM resolution.
-            if module_system == ModuleSystem.ES_MODULE:
+            # For ESM, add .js extension (TypeScript convention) — but only for Vitest/native ESM.
+            # Jest resolves .ts imports without .js extensions via its transform/resolver config,
+            # so adding .js breaks Jest module resolution (Cannot find module '../foo.js').
+            from codeflash.languages.test_framework import get_js_test_framework_or_default
+
+            test_framework = get_js_test_framework_or_default()
+            if module_system == ModuleSystem.ES_MODULE and test_framework != "jest":
                 rel_path = rel_path + ".js"
                 logger.debug(
                     f"!lsp|Module path (ESM): source={source_file_abs}, tests_root={tests_root_abs}, "
@@ -2286,7 +2289,7 @@ class JavaScriptSupport:
             # For fallback, also check module system
             module_system = detect_module_system(project_root, source_file)
             path_without_ext = "../" + rel_path.with_suffix("").as_posix()
-            if module_system == ModuleSystem.ES_MODULE:
+            if module_system == ModuleSystem.ES_MODULE and test_framework != "jest":
                 return path_without_ext + ".js"
             return path_without_ext
 
