@@ -3,6 +3,7 @@
 Tests the full cycle: behavioral baseline → optimize → behavioral candidate → compare → benchmark.
 Uses code_to_optimize/bubble_sort.py as the target function.
 """
+from __future__ import annotations
 
 import sys
 import uuid
@@ -51,7 +52,9 @@ module.exports = { bubbleSort };
 
 
 
-def doTest(config: dict[str, str]) -> int:
+def doTest(config: dict[str, str] | None) -> int:
+    if config is None:
+        return 0
     print("===========================================================")
     print("*"* 10 + config["language"] + "*"* 10)
     print("===========================================================")
@@ -202,8 +205,7 @@ def main() -> int:
     print("MCP WORKFLOW TEST")
     print("=" * 60)
     print("\n")
-    langs = ["python", "javascript"]
-    langs = ["python"]
+    langs = ["python", "javascript", "java"]
     for lang in langs:
         exit_code = doTest(get_e2e_test_config_by_language(lang))
         if exit_code != 0:
