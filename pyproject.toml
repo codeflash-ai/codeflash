@@ -63,8 +63,10 @@ Homepage = "https://codeflash.ai"
 
 [project.scripts]
 codeflash = "codeflash.main:main"
+codeflash-mcp = "mcp_server.server:main"
 
 [project.optional-dependencies]
+mcp = ["fastmcp>=2.0.0; python_version >= '3.10'"]
 
 [dependency-groups]
 dev = [

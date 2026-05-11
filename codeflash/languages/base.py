@@ -956,6 +956,7 @@ class LanguageSupport(Protocol):
         project_root: Path | None = None,
         enable_coverage: bool = False,
         candidate_index: int = 0,
+        test_framework: str | None = None,
     ) -> tuple[Path, Any, Path | None, Path | None]:
         """Run behavioral tests for this language.
 
@@ -967,6 +968,7 @@ class LanguageSupport(Protocol):
             project_root: Project root directory.
             enable_coverage: Whether to collect coverage information.
             candidate_index: Index of the candidate being tested.
+            test_framework: Test framework to use
 
         Returns:
             Tuple of (result_file_path, subprocess_result, coverage_path, config_path).
