@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +20,12 @@ class TestingMode(str, Enum):
     BENCHMARKING = "benchmarking"
 
 
+@dataclass(frozen=True)
+class _ResolvedTestFile:
+    original_path: Path
+    effective_path: Path
+
+
 def build_test_env(project_root: Path) -> dict[str, str]:
     env = make_env_with_project_root(project_root)
     env["CODEFLASH_TEST_ITERATION"] = "0"
@@ -29,18 +36,19 @@ def build_test_env(project_root: Path) -> dict[str, str]:
     return env
 
 
-def _build_test_files(test_file_paths: list[str], mode: TestingMode) -> TestFiles:
+def _build_test_files(test_files: list[_ResolvedTestFile], mode: TestingMode) -> TestFiles:
     from codeflash.models.models import TestFile, TestFiles
     from codeflash.models.test_type import TestType
 
     test_files_objs = []
-    for path_str in test_file_paths:
-        p = Path(path_str).resolve()
+    for test_file in test_files:
+        effective_path = test_file.effective_path.resolve()
+        original_path = test_file.original_path.resolve()
         test_files_objs.append(
             TestFile(
-                instrumented_behavior_file_path=p,
-                benchmarking_file_path=p if mode == TestingMode.BENCHMARKING else None,
-                original_file_path=p,
+                instrumented_behavior_file_path=effective_path,
+                benchmarking_file_path=effective_path if mode == TestingMode.BENCHMARKING else None,
+                original_file_path=original_path,
                 test_type=TestType.EXISTING_UNIT_TEST,
             )
         )
@@ -138,8 +146,31 @@ def _invoke_with_optional_test_framework(run_callable: object, *, test_framework
     return run_callable(**kwargs)
 
 
+def _resolve_test_files(test_file_paths: list[str]) -> list[_ResolvedTestFile]:
+    return [_ResolvedTestFile(original_path=Path(path).resolve(), effective_path=Path(path).resolve()) for path in test_file_paths]
+
+
+def _instrumented_test_path(test_path: Path, language: str, mode: TestingMode) -> Path:
+    if language != "java":
+        return test_path
+
+    suffix = "__perfinstrumented" if mode == TestingMode.BEHAVIORAL else "__perfonlyinstrumented"
+    if test_path.stem.endswith(suffix):
+        return test_path
+    return test_path.with_name(f"{test_path.stem}{suffix}{test_path.suffix}")
+
+
+def _reset_java_compilation_cache(language: str) -> None:
+    if language != "java":
+        return
+
+    from codeflash.languages.java.test_runner import CompilationCache
+
+    CompilationCache.clear()
+
+
 class _InstrumentedFiles:
-    """Context manager that instruments test files in-place and restores originals on exit."""
+    """Context manager that instruments MCP test files and restores originals on exit."""
 
     def __init__(
         self,
@@ -157,8 +188,17 @@ class _InstrumentedFiles:
         self.language = language
         self.mode = mode
         self._backups: dict[Path, str] = {}
+        self._created_files: set[Path] = set()
 
-    def __enter__(self) -> list[str]:
+    def _write_instrumented_source(self, target_path: Path, code: str) -> None:
+        if target_path.exists():
+            self._backups[target_path] = target_path.read_text(encoding="utf-8")
+        else:
+            self._created_files.add(target_path)
+
+        target_path.write_text(code, encoding="utf-8")
+
+    def __enter__(self) -> list[_ResolvedTestFile]:
         from codeflash.languages.current import set_current_language
         from codeflash.languages.registry import get_language_support
 
@@ -174,13 +214,14 @@ class _InstrumentedFiles:
 
         instrument_mode = "behavior" if self.mode == TestingMode.BEHAVIORAL else "performance"
 
-        instrumented_paths: list[str] = []
+        instrumented_paths: list[_ResolvedTestFile] = []
         for test_file in self.test_file_paths:
             test_path = Path(test_file).resolve()
+            instrumented_path = _instrumented_test_path(test_path, self.language, self.mode)
 
             call_positions = _find_call_positions(test_path, func_to_optimize.function_name, self.language)
             if self.language == "python" and not call_positions:
-                instrumented_paths.append(test_file)
+                instrumented_paths.append(_ResolvedTestFile(original_path=test_path, effective_path=test_path))
                 continue
 
             success, code = lang_support.instrument_existing_test(
@@ -192,18 +233,23 @@ class _InstrumentedFiles:
             )
 
             if success and code:
-                self._backups[test_path] = test_path.read_text(encoding="utf-8")
-                test_path.write_text(code, encoding="utf-8")
-                instrumented_paths.append(str(test_path))
+                self._write_instrumented_source(instrumented_path, code)
+                instrumented_paths.append(_ResolvedTestFile(original_path=test_path, effective_path=instrumented_path))
             else:
-                instrumented_paths.append(test_file)
+                instrumented_paths.append(_ResolvedTestFile(original_path=test_path, effective_path=test_path))
 
         return instrumented_paths
 
     def __exit__(self, *_exc: object) -> None:
+        # restore original code for backup files
         for path, original_content in self._backups.items():
             path.write_text(original_content, encoding="utf-8")
+
+        # remove new files
+        for path in self._created_files:
+            path.unlink(missing_ok=True)
         self._backups.clear()
+        self._created_files.clear()
 
 
 def run_and_parse(
@@ -225,11 +271,12 @@ def run_and_parse(
 
     set_current_language(language)
     lang_support = get_language_support(language)
+    _reset_java_compilation_cache(language)
 
     test_env = build_test_env(project_root)
     test_config = _build_test_config(project_root)
 
-    def _execute(effective_files: list[str]) -> tuple[TestResults, subprocess.CompletedProcess[str]]:
+    def _execute(effective_files: list[_ResolvedTestFile]) -> tuple[TestResults, subprocess.CompletedProcess[str]]:
         test_files_obj = _build_test_files(effective_files, mode)
 
         if mode == TestingMode.BEHAVIORAL:
@@ -281,4 +328,4 @@ def run_and_parse(
         ) as effective_files:
             return _execute(effective_files)
     else:
-        return _execute(test_files)
+        return _execute(_resolve_test_files(test_files))

@@ -48,6 +48,48 @@ function bubbleSort(arr) {
 module.exports = { bubbleSort };
 """,
         }
+    if language == "java":
+        return {
+            "language": language,
+            "test_file": str(CODE_DIR / "java/src/test/java/com/example/BubbleSortTest.java"),
+            "module_path": str(CODE_DIR / "java/src/main/java/com/example/BubbleSort.java"),
+            "function_name": "BubbleSort.bubbleSort",
+            "root": str(CODE_DIR / "java"),
+            "optimized_code": """package com.example;
+
+import java.util.Arrays;
+
+/**
+ * Optimized sorting algorithms.
+ */
+public class BubbleSort {
+
+    /**
+     * Fast version:
+     * - Uses native JVM optimized sort (Dual-Pivot Quicksort for int[])
+     * - Much faster than bubble sort
+     * - O(n log n) instead of O(n²)
+     *
+     * @param arr Array to sort
+     * @return New sorted array (ascending order)
+     */
+    public static int[] bubbleSort(int[] arr) {
+        if (arr == null || arr.length <= 1) {
+            return arr;
+        }
+
+        // clone is faster than manual copying loop
+        int[] result = arr.clone();
+
+        // Highly optimized JDK implementation
+        Arrays.sort(result);
+
+        return result;
+    }
+}
+""",
+        }
+
     return None
 
 
