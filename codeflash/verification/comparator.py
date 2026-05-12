@@ -95,6 +95,8 @@ _IDENTITY_EQ_TYPES: frozenset[type[Any]] = frozenset(
     }
 )
 
+_FAST_SEQUENCE_EQ_TYPES: frozenset[type[Any]] = _IDENTITY_EQ_TYPES | frozenset({float, str})
+
 _EQUALITY_TYPES = (
     int,
     bool,
@@ -223,7 +225,20 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
         if orig_type is list or orig_type is tuple:
             if len(orig) != len(new):
                 return False
-            return all(comparator(elem1, elem2, superset_obj) for elem1, elem2 in zip(orig, new))
+            if orig:
+                all_fast_scalars = True
+                for idx, elem1 in enumerate(orig):
+                    elem_type = type(elem1)
+                    if elem_type is not type(new[idx]) or elem_type not in _FAST_SEQUENCE_EQ_TYPES:
+                        all_fast_scalars = False
+                        break
+                if all_fast_scalars and orig == new:
+                    return True
+
+            for idx, elem1 in enumerate(orig):
+                if not comparator(elem1, new[idx], superset_obj):
+                    return False
+            return True
         if orig_type is dict:
             if superset_obj:
                 return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
@@ -236,6 +251,8 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                     return False
             return True
         if orig_type is float:
+            if orig == new:
+                return True
             if math.isnan(orig) and math.isnan(new):
                 return True
             return math.isclose(orig, new)
