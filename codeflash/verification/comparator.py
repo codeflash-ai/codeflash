@@ -180,7 +180,58 @@ def _get_wrapped_exception(exc: BaseException) -> Optional[BaseException]:  # no
 def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
     """Compare two objects for equality recursively. If superset_obj is True, the new object is allowed to have more keys than the original object. However, the existing keys/values must be equivalent."""
     try:
-        # Handle exceptions specially - before type check to allow wrapper comparison
+        orig_type = type(orig)
+        new_type = type(new)
+
+        # Fast-path: type identity checks for the most common return-value types.
+        # `orig_type is T` is a single pointer comparison — cheaper than frozenset hash
+        # lookup or isinstance MRO traversal — and these 4 types dominate real workloads.
+        if orig_type is new_type:
+            if orig_type is str:
+                if orig == new:
+                    return True
+                if _is_temp_path(orig) and _is_temp_path(new):
+                    return _normalize_temp_path(orig) == _normalize_temp_path(new)
+                return False
+            if orig_type is list or orig_type is tuple:
+                if len(orig) != len(new):
+                    return False
+                if orig:
+                    all_fast_scalars = True
+                    for idx, elem1 in enumerate(orig):
+                        elem_type = type(elem1)
+                        if elem_type is not type(new[idx]) or elem_type not in _FAST_SEQUENCE_EQ_TYPES:
+                            all_fast_scalars = False
+                            break
+                    if all_fast_scalars and orig == new:
+                        return True
+
+                for idx, elem1 in enumerate(orig):
+                    if not comparator(elem1, new[idx], superset_obj):
+                        return False
+                return True
+            if orig_type is dict:
+                if superset_obj:
+                    return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
+                if len(orig) != len(new):
+                    return False
+                for key in orig:
+                    if key not in new:
+                        return False
+                    if not comparator(orig[key], new[key], superset_obj):
+                        return False
+                return True
+            if orig_type is float:
+                if orig == new:
+                    return True
+                if math.isnan(orig) and math.isnan(new):
+                    return True
+                return math.isclose(orig, new)
+            # O(1) frozenset lookup for remaining common types (int, bool, None, Decimal, etc.)
+            if orig_type in _IDENTITY_EQ_TYPES:
+                return orig == new
+
+        # Handle exceptions specially - before the generic type-mismatch path to allow wrapper comparison
         if isinstance(orig, BaseException) and isinstance(new, BaseException):
             if isinstance(orig, PicklePlaceholderAccessError) or isinstance(new, PicklePlaceholderAccessError):
                 # If this error was raised, there was an attempt to access the PicklePlaceholder, which represents an unpickleable object.
@@ -189,7 +240,7 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 return False
 
             # If types match exactly, compare attributes
-            if type(orig) is type(new):
+            if orig_type is new_type:
                 orig_dict = {k: v for k, v in orig.__dict__.items() if not k.startswith("_")}
                 new_dict = {k: v for k, v in new.__dict__.items() if not k.startswith("_")}
                 return comparator(orig_dict, new_dict, superset_obj)
@@ -207,58 +258,10 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
 
             return False
 
-        orig_type = type(orig)
-        if orig_type is not type(new):
+        if orig_type is not new_type:
             # distinct type objects are created at runtime, even if the class code is exactly the same, so we can only compare the names
-            if orig_type.__name__ != type(new).__name__ or orig_type.__qualname__ != type(new).__qualname__:
+            if orig_type.__name__ != new_type.__name__ or orig_type.__qualname__ != new_type.__qualname__:
                 return False
-
-        # Fast-path: type identity checks for the most common return-value types.
-        # `orig_type is T` is a single pointer comparison — cheaper than frozenset hash
-        # lookup or isinstance MRO traversal — and these 4 types dominate real workloads.
-        if orig_type is str:
-            if orig == new:
-                return True
-            if _is_temp_path(orig) and _is_temp_path(new):
-                return _normalize_temp_path(orig) == _normalize_temp_path(new)
-            return False
-        if orig_type is list or orig_type is tuple:
-            if len(orig) != len(new):
-                return False
-            if orig:
-                all_fast_scalars = True
-                for idx, elem1 in enumerate(orig):
-                    elem_type = type(elem1)
-                    if elem_type is not type(new[idx]) or elem_type not in _FAST_SEQUENCE_EQ_TYPES:
-                        all_fast_scalars = False
-                        break
-                if all_fast_scalars and orig == new:
-                    return True
-
-            for idx, elem1 in enumerate(orig):
-                if not comparator(elem1, new[idx], superset_obj):
-                    return False
-            return True
-        if orig_type is dict:
-            if superset_obj:
-                return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())
-            if len(orig) != len(new):
-                return False
-            for key in orig:
-                if key not in new:
-                    return False
-                if not comparator(orig[key], new[key], superset_obj):
-                    return False
-            return True
-        if orig_type is float:
-            if orig == new:
-                return True
-            if math.isnan(orig) and math.isnan(new):
-                return True
-            return math.isclose(orig, new)
-        # O(1) frozenset lookup for remaining common types (int, bool, None, Decimal, etc.)
-        if orig_type in _IDENTITY_EQ_TYPES:
-            return orig == new
 
         # Slower isinstance path for subclasses (deque, ChainMap, etc.)
         if isinstance(orig, (list, tuple, deque, ChainMap)):
