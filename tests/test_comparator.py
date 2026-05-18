@@ -5,6 +5,7 @@ import dataclasses
 import datetime
 import decimal
 import re
+import subprocess
 import sys
 import uuid
 import weakref
@@ -27,6 +28,27 @@ from codeflash.verification.comparator import (
     comparator,
 )
 from codeflash.verification.equivalence import compare_test_results
+
+
+def test_comparator_import_does_not_load_optional_numeric_modules() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys; "
+                "import codeflash.verification.comparator; "
+                "loaded = {'numpy', 'pandas', 'xarray', 'numexpr'} & set(sys.modules); "
+                "print(','.join(sorted(loaded))); "
+                "raise SystemExit(bool(loaded))"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def test_basic_python_objects() -> None:
