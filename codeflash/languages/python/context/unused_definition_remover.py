@@ -202,7 +202,12 @@ class DependencyCollector(cst.CSTVisitor):
     def _extract_names_from_annotation(self, node: cst.CSTNode) -> None:
         if isinstance(node, cst.Name):
             name = node.value
-            if name in self.definitions and name != self.current_top_level_name and self.current_top_level_name:
+            if (
+                name in self.definitions
+                and name != self.current_top_level_name
+                and self.current_top_level_name
+                and self.current_top_level_name in self.definitions
+            ):
                 self.definitions[self.current_top_level_name].dependencies.add(name)
         elif isinstance(node, cst.Subscript):
             self._extract_names_from_annotation(node.value)
