@@ -101,7 +101,6 @@ The full ruleset is in [`.claude/rules/code-style.md`](.claude/rules/code-style.
 
 ## Branches, commits, and pull requests
 
-- **Every PR must link an issue or discussion.** Use `Closes #<number>`, `Fixes #<number>`, or `Relates to #<number>` in the PR body. CI will fail if no linked issue or discussion is found. For trivial fixes (typos, formatting), open a lightweight issue first — it only takes a moment and keeps the history traceable. The goal is to have a conversation before the code — discussing the approach on an issue or discussion helps maintainers point you in the right direction early, so your implementation fits the project's needs and you don't spend time on work that gets reworked.
 - Create a feature branch off an up-to-date `main`. Never commit directly to `main`.
 - Use conventional-commit prefixes: `fix:`, `feat:`, `refactor:`, `docs:`, `test:`, `chore:`. Keep commit messages concise (1-2 sentence body max).
 - Keep commits atomic - one logical change per commit.
