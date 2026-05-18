@@ -1,3 +1,5 @@
+exclude: ^(tests/|code_to_optimize/|pie_test_set/|experiments/|\.codeflash/)
+
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.8
@@ -9,7 +11,8 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: uv run mypy --non-interactive --config-file pyproject.toml
+        entry: uv run mypy --non-interactive --config-file pyproject.toml @mypy_allowlist.txt
         language: system
+        pass_filenames: false
         types: [python]
         require_serial: true

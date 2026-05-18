@@ -306,9 +306,7 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 if not comparator(orig.dense_shape.numpy(), new.dense_shape.numpy(), superset_obj):
                     return False
                 return comparator(orig.indices.numpy(), new.indices.numpy(), superset_obj) and comparator(
-                    orig.values.numpy(),
-                    new.values.numpy(),
-                    superset_obj,
+                    orig.values.numpy(), new.values.numpy(), superset_obj
                 )
 
             if isinstance(orig, tf.RaggedTensor):
@@ -336,9 +334,7 @@ def comparator(orig: Any, new: Any, superset_obj: bool = False) -> bool:
                 pass
 
         # scipy condition because dok_matrix type is also a instance of dict, but dict comparison doesn't work for it
-        scipy_sparse = (
-            _optional_module("scipy.sparse") if HAS_SCIPY and _object_module_matches(orig, "scipy") else None
-        )
+        scipy_sparse = _optional_module("scipy.sparse") if HAS_SCIPY and _object_module_matches(orig, "scipy") else None
         if isinstance(orig, dict) and not (scipy_sparse is not None and isinstance(orig, scipy_sparse.spmatrix)):
             if superset_obj:
                 return all(k in new and comparator(v, new[k], superset_obj) for k, v in orig.items())

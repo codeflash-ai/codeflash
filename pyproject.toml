@@ -218,7 +218,7 @@ warn_unreachable = true
 install_types = true
 plugins = ["pydantic.mypy"]
 
-exclude = ["tests/", "code_to_optimize/", "pie_test_set/", "experiments/"]
+exclude = ["tests/", "code_to_optimize/", "pie_test_set/", "experiments/", "^\\.codeflash/"]
 
 [[tool.mypy.overrides]]
 module = ["jedi", "jedi.api.classes", "inquirer", "inquirer.themes", "numba", "dill"]
@@ -379,4 +379,3 @@ markers = [
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
-
