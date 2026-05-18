@@ -16,7 +16,7 @@ import pydantic
 import pytest
 
 from codeflash.either import Failure, Success
-from codeflash.models.models import FunctionTestInvocation, InvocationId, TestResults, TestType
+from codeflash.models.models import FunctionTestInvocation, InvocationId, TestDiffScope, TestResults, TestType
 from codeflash.verification.comparator import (
     PYTEST_TEMP_PATH_PATTERN,
     PYTHON_TEMPFILE_PATTERN,
@@ -2997,6 +2997,60 @@ def test_compare_results_fn():
 
     match, _ = compare_test_results(TestResults(), TestResults())
     assert not match
+
+
+def test_compare_results_detects_stdout_mismatch_when_candidate_stdout_is_empty() -> None:
+    original_results = TestResults()
+    original_results.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=True,
+            runtime=5,
+            test_framework="pytest",
+            test_type=TestType.EXISTING_UNIT_TEST,
+            return_value=[0, 1, 2],
+            timed_out=False,
+            loop_index=1,
+            stdout="codeflash stdout: Sorting list\nresult: [0, 1, 2]\n",
+        )
+    )
+
+    candidate_results = TestResults()
+    candidate_results.add(
+        FunctionTestInvocation(
+            id=InvocationId(
+                test_module_path="test_module_path",
+                test_class_name="test_class_name",
+                test_function_name="test_function_name",
+                function_getting_tested="function_getting_tested",
+                iteration_id="0",
+            ),
+            file_name=Path("file_name"),
+            did_pass=True,
+            runtime=5,
+            test_framework="pytest",
+            test_type=TestType.EXISTING_UNIT_TEST,
+            return_value=[0, 1, 2],
+            timed_out=False,
+            loop_index=1,
+            stdout="",
+        )
+    )
+
+    match, diffs = compare_test_results(original_results, candidate_results)
+
+    assert not match
+    assert len(diffs) == 1
+    assert diffs[0].scope == TestDiffScope.STDOUT
+    assert diffs[0].original_value == "codeflash stdout: Sorting list\nresult: [0, 1, 2]\n"
+    assert diffs[0].candidate_value == ""
 
 
 def test_exceptions():

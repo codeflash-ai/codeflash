@@ -71,6 +71,16 @@ function getPerfStabilityCheck() {
 function getPerfCurrentBatch() {
     return parseInt(process.env.CODEFLASH_PERF_CURRENT_BATCH || '0', 10);
 }
+// Warmup iterations to trigger V8 JIT compilation before timing
+function getPerfWarmupIterations() {
+    return parseInt(process.env.CODEFLASH_PERF_WARMUP_ITERATIONS || '5', 10);
+}
+// Minimum time in nanoseconds for calibration (5us matches Python's MIN_TIME)
+function getPerfMinTimeNs() {
+    return parseInt(process.env.CODEFLASH_PERF_MIN_TIME_NS || '5000', 10);
+}
+// Maximum iterations per round to prevent infinite loops on no-op functions
+const MAX_CALIBRATION_ITERATIONS = 1_000_000;
 
 // Stability constants (matching Python's config_consts.py)
 const STABILITY_WINDOW_SIZE = 0.35;
@@ -89,6 +99,7 @@ if (!process[PERF_STATE_KEY]) {
         invocationLoopCounts: {},  // Track loops per invocation: {invocationKey: loopCount}
         invocationRuntimes: {},    // Track runtimes per invocation for stability: {invocationKey: [runtimes]}
         stableInvocations: {},     // Invocations that have reached stability: {invocationKey: true}
+        calibrationCache: {},      // Cached calibration results per invocation: {invocationKey: {iterations, isAsync}}
     };
 }
 const sharedPerfState = process[PERF_STATE_KEY];
@@ -403,6 +414,147 @@ function shouldStopStability(runtimes, window, minWindowSize) {
     if (rMin === 0) return false;
 
     return (rMax - rMin) / rMin <= STABILITY_SPREAD_TOLERANCE;
+}
+
+/**
+ * Calibrate the number of iterations needed for accurate timing.
+ * Mirrors Python's calibrate() in benchmarking/plugin/plugin.py.
+ *
+ * Runs the function in increasing iteration counts until total time
+ * exceeds MIN_TIME_NS. This amortizes timer overhead for fast functions.
+ *
+ * @param {Function} fn - The function to calibrate
+ * @param {Array} args - Arguments to pass to fn
+ * @returns {number} - Number of iterations per round
+ */
+function calibrate(fn, args) {
+    const minTimeNs = getPerfMinTimeNs();
+    const minTimeEstimate = minTimeNs / 5;
+    let iterations = 1;
+
+    while (iterations <= MAX_CALIBRATION_ITERATIONS) {
+        const start = process.hrtime.bigint();
+        for (let i = 0; i < iterations; i++) {
+            fn(...args);
+        }
+        const duration = Number(process.hrtime.bigint() - start);
+
+        if (duration >= minTimeNs) {
+            break;
+        }
+
+        if (duration >= minTimeEstimate) {
+            iterations = Math.min(
+                Math.ceil(minTimeNs * iterations / duration),
+                MAX_CALIBRATION_ITERATIONS
+            );
+        } else {
+            iterations = Math.min(iterations * 10, MAX_CALIBRATION_ITERATIONS);
+        }
+    }
+
+    return iterations;
+}
+
+/**
+ * Async version of calibrate for Promise-returning functions.
+ * Async functions typically have higher per-call overhead, so iterations
+ * will usually be 1 (effectively single-call timing, which is correct).
+ *
+ * @param {Function} fn - The async function to calibrate
+ * @param {Array} args - Arguments to pass to fn
+ * @returns {Promise<number>} - Number of iterations per round
+ */
+async function calibrateAsync(fn, args) {
+    const minTimeNs = getPerfMinTimeNs();
+    const minTimeEstimate = minTimeNs / 5;
+    let iterations = 1;
+
+    while (iterations <= MAX_CALIBRATION_ITERATIONS) {
+        const start = process.hrtime.bigint();
+        for (let i = 0; i < iterations; i++) {
+            await fn(...args);
+        }
+        const duration = Number(process.hrtime.bigint() - start);
+
+        if (duration >= minTimeNs) {
+            break;
+        }
+
+        if (duration >= minTimeEstimate) {
+            iterations = Math.min(
+                Math.ceil(minTimeNs * iterations / duration),
+                MAX_CALIBRATION_ITERATIONS
+            );
+        } else {
+            iterations = Math.min(iterations * 10, MAX_CALIBRATION_ITERATIONS);
+        }
+    }
+
+    return iterations;
+}
+
+/**
+ * Perform warmup and calibration for a call site.
+ * Runs warmup iterations to trigger V8 JIT compilation, then calibrates
+ * the number of iterations needed for accurate timing.
+ *
+ * Results are cached in sharedPerfState.calibrationCache per invocationKey.
+ *
+ * @param {string} invocationKey - Unique key for this call site
+ * @param {Function} fn - The function to benchmark
+ * @param {Array} args - Arguments to pass to fn
+ * @returns {{iterations: number, isAsync: boolean}} - Calibration result
+ */
+function warmupAndCalibrate(invocationKey, fn, args) {
+    const cached = sharedPerfState.calibrationCache[invocationKey];
+    if (cached) return cached;
+
+    const warmupCount = getPerfWarmupIterations();
+
+    // Warmup: run function to trigger V8 JIT compilation
+    for (let i = 0; i < warmupCount; i++) {
+        const result = fn(...args);
+        // If function returns a Promise, fall through to async calibration
+        if (result instanceof Promise) {
+            // Can't do sync warmup for async functions - mark for async path
+            const asyncResult = { iterations: 1, isAsync: true };
+            sharedPerfState.calibrationCache[invocationKey] = asyncResult;
+            return asyncResult;
+        }
+    }
+
+    // Calibrate: find iteration count that exceeds MIN_TIME_NS
+    const iterations = calibrate(fn, args);
+    const result = { iterations, isAsync: false };
+    sharedPerfState.calibrationCache[invocationKey] = result;
+    return result;
+}
+
+/**
+ * Async version of warmupAndCalibrate.
+ *
+ * @param {string} invocationKey - Unique key for this call site
+ * @param {Function} fn - The async function to benchmark
+ * @param {Array} args - Arguments to pass to fn
+ * @returns {Promise<{iterations: number, isAsync: boolean}>} - Calibration result
+ */
+async function warmupAndCalibrateAsync(invocationKey, fn, args) {
+    const cached = sharedPerfState.calibrationCache[invocationKey];
+    if (cached) return cached;
+
+    const warmupCount = getPerfWarmupIterations();
+
+    // Warmup: run async function to trigger V8 JIT compilation
+    for (let i = 0; i < warmupCount; i++) {
+        await fn(...args);
+    }
+
+    // Calibrate
+    const iterations = await calibrateAsync(fn, args);
+    const result = { iterations, isAsync: true };
+    sharedPerfState.calibrationCache[invocationKey] = result;
+    return result;
 }
 
 /**
@@ -791,6 +943,18 @@ function capturePerf(funcName, lineId, fn, ...args) {
     // For Vitest (no loop-runner), do all loops internally in a single call
     const batchSize = hasExternalLoopRunner ? 1 : (shouldLoop ? getPerfLoopCount() : 1);
 
+    // Warmup + calibration: run once per call site to trigger JIT and determine iteration count
+    const calibrationResult = warmupAndCalibrate(invocationKey, fn, args);
+    if (calibrationResult.isAsync) {
+        // Function returns Promises - delegate entirely to async path
+        return _capturePerfAsyncFull(
+            funcName, lineId, fn, args,
+            safeModulePath, testClassName, safeTestFunctionName,
+            invocationKey, shouldLoop, batchSize, hasExternalLoopRunner
+        );
+    }
+    const iterationsPerRound = calibrationResult.iterations;
+
     // Initialize runtime tracking for this invocation if needed
     if (!sharedPerfState.invocationRuntimes[invocationKey]) {
         sharedPerfState.invocationRuntimes[invocationKey] = [];
@@ -828,26 +992,29 @@ function capturePerf(funcName, lineId, fn, ...args) {
         // Format stdout tag with current loop index
         const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
 
-        // Timing with nanosecond precision
+        // Print start tag
+        process.stdout.write(`!$######${testStdoutTag}######$!\n`);
+
+        // Force GC before timing to avoid GC pauses during measurement
+        if (typeof global.gc === 'function') global.gc();
+
+        // Timing with nanosecond precision and multi-iteration inner loop
         let durationNs;
         try {
-            const startTime = getTimeNs();
-            lastReturnValue = fn(...args);
-            const endTime = getTimeNs();
-            durationNs = getDurationNs(startTime, endTime);
-
-            // Handle promises - for async functions, we need to handle looping differently
-            // Since we can't use await in the sync loop, delegate to async helper
-            if (lastReturnValue instanceof Promise) {
-                // For async functions, delegate to the async looping helper
-                // Pass along all the context needed for continued looping
-                return _capturePerfAsync(
-                    funcName, lineId, fn, args,
-                    lastReturnValue, startTime, testStdoutTag,
-                    safeModulePath, testClassName, safeTestFunctionName,
-                    invocationKey, runtimes, batchSize, batchIndex,
-                    shouldLoop, getStabilityWindow
-                );
+            if (iterationsPerRound > 1) {
+                // Multi-iteration: amortize timer overhead for fast functions
+                const startTime = getTimeNs();
+                for (let i = 0; i < iterationsPerRound; i++) {
+                    lastReturnValue = fn(...args);
+                }
+                const endTime = getTimeNs();
+                durationNs = Math.round(getDurationNs(startTime, endTime) / iterationsPerRound);
+            } else {
+                // Single iteration
+                const startTime = getTimeNs();
+                lastReturnValue = fn(...args);
+                const endTime = getTimeNs();
+                durationNs = getDurationNs(startTime, endTime);
             }
 
             lastError = null;
@@ -856,7 +1023,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
             lastError = e;
         }
 
-        // Print end tag with timing (use process.stdout.write to bypass test framework console interception)
+        // Print end tag with per-call timing
         process.stdout.write(`!######${testStdoutTag}:${durationNs}######!\n`);
 
         // Update shared loop counter
@@ -896,7 +1063,7 @@ function capturePerf(funcName, lineId, fn, ...args) {
  * Helper to record async timing and update state.
  * @private
  */
-function _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes) {
+function _recordAsyncTiming(testStdoutTag, durationNs, runtimes) {
     process.stdout.write(`!######${testStdoutTag}:${durationNs}######!\n`);
     sharedPerfState.totalLoopsCompleted++;
     if (durationNs > 0) {
@@ -905,107 +1072,99 @@ function _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes) {
 }
 
 /**
- * Async helper for capturePerf to handle async function looping.
- * This function awaits promises and continues the benchmark loop properly.
+ * Full async capturePerf path with warmup, calibration, GC control, and start markers.
+ * Called when warmupAndCalibrate detects the function returns Promises.
  *
  * @private
- * @param {string} funcName - Name of the function being benchmarked
- * @param {string} lineId - Line identifier for this capture point
- * @param {Function} fn - The async function to benchmark
- * @param {Array} args - Arguments to pass to fn
- * @param {Promise} firstPromise - The first promise that was already started
- * @param {number} firstStartTime - Start time of the first execution
- * @param {string} firstTestStdoutTag - Timing marker tag for the first execution
- * @param {string} safeModulePath - Sanitized module path
- * @param {string|null} testClassName - Test class name (if any)
- * @param {string} safeTestFunctionName - Sanitized test function name
- * @param {string} invocationKey - Unique key for this invocation
- * @param {Array<number>} runtimes - Array to collect runtimes for stability checking
- * @param {number} batchSize - Number of iterations per batch
- * @param {number} startBatchIndex - Index where async looping started
- * @param {boolean} shouldLoop - Whether to continue looping
- * @param {Function} getStabilityWindow - Function to get stability window size
- * @returns {Promise} The last return value from fn
  */
-async function _capturePerfAsync(
+async function _capturePerfAsyncFull(
     funcName, lineId, fn, args,
-    firstPromise, firstStartTime, firstTestStdoutTag,
     safeModulePath, testClassName, safeTestFunctionName,
-    invocationKey, runtimes, batchSize, startBatchIndex,
-    shouldLoop, getStabilityWindow
+    invocationKey, shouldLoop, batchSize, hasExternalLoopRunner
 ) {
+    // Async warmup + calibration
+    const calibrationResult = await warmupAndCalibrateAsync(invocationKey, fn, args);
+    const iterationsPerRound = calibrationResult.iterations;
+
+    // Initialize runtime tracking
+    if (!sharedPerfState.invocationRuntimes[invocationKey]) {
+        sharedPerfState.invocationRuntimes[invocationKey] = [];
+    }
+    const runtimes = sharedPerfState.invocationRuntimes[invocationKey];
+    const getStabilityWindow = () => Math.max(getPerfMinLoops(), Math.ceil(runtimes.length * STABILITY_WINDOW_SIZE));
+
     let lastReturnValue;
     let lastError = null;
 
-    // Handle the first promise that was already started
-    try {
-        lastReturnValue = await firstPromise;
-        const asyncEndTime = getTimeNs();
-        const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
-        _recordAsyncTiming(firstStartTime, firstTestStdoutTag, asyncDurationNs, runtimes);
-    } catch (err) {
-        const asyncEndTime = getTimeNs();
-        const asyncDurationNs = getDurationNs(firstStartTime, asyncEndTime);
-        _recordAsyncTiming(firstStartTime, firstTestStdoutTag, asyncDurationNs, runtimes);
-        lastError = err;
-        // Don't throw yet - we want to record the timing first
-    }
-
-    // If first iteration failed, stop and throw
-    if (lastError) {
-        throw lastError;
-    }
-
-    // Continue looping for remaining iterations
-    for (let batchIndex = startBatchIndex + 1; batchIndex < batchSize; batchIndex++) {
-        // Check exit conditions before starting next iteration
-        if (shouldLoop && checkSharedTimeLimit()) {
+    for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
+        if (!hasExternalLoopRunner && shouldLoop && checkSharedTimeLimit()) {
             break;
         }
 
-        if (getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && sharedPerfState.stableInvocations[invocationKey]) {
             break;
         }
 
-        // Get the loop index (batch number) for timing markers
         const loopIndex = getInvocationLoopIndex(invocationKey);
 
-        // Check if we've exceeded max loops for this invocation
-        const totalIterations = getTotalIterations(invocationKey);
-        if (totalIterations > getPerfLoopCount()) {
+        const totalIters = getTotalIterations(invocationKey);
+        if (!hasExternalLoopRunner && totalIters > getPerfLoopCount()) {
             break;
         }
 
-        // Generate timing marker identifiers
         const testId = `${safeModulePath}:${testClassName}:${safeTestFunctionName}:${lineId}:${loopIndex}`;
         const invocationIndex = getInvocationIndex(testId);
         const invocationId = `${lineId}_${invocationIndex}`;
         const testStdoutTag = `${safeModulePath}:${testClassName ? testClassName + '.' : ''}${safeTestFunctionName}:${funcName}:${loopIndex}:${invocationId}`;
 
-        // Execute and time the function
+        // Print start tag
+        process.stdout.write(`!$######${testStdoutTag}######$!\n`);
+
+        // Force GC before timing
+        if (typeof global.gc === 'function') global.gc();
+
+        let durationNs;
         try {
-            const startTime = getTimeNs();
-            lastReturnValue = await fn(...args);
-            const endTime = getTimeNs();
-            const durationNs = getDurationNs(startTime, endTime);
-
-            _recordAsyncTiming(startTime, testStdoutTag, durationNs, runtimes);
-
-            // Check if we've reached performance stability
-            if (getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
-                const window = getStabilityWindow();
-                if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
-                    sharedPerfState.stableInvocations[invocationKey] = true;
-                    break;
+            if (iterationsPerRound > 1) {
+                const startTime = getTimeNs();
+                for (let i = 0; i < iterationsPerRound; i++) {
+                    lastReturnValue = await fn(...args);
                 }
+                const endTime = getTimeNs();
+                durationNs = Math.round(getDurationNs(startTime, endTime) / iterationsPerRound);
+            } else {
+                const startTime = getTimeNs();
+                lastReturnValue = await fn(...args);
+                const endTime = getTimeNs();
+                durationNs = getDurationNs(startTime, endTime);
             }
+            lastError = null;
         } catch (e) {
+            durationNs = 0;
             lastError = e;
+        }
+
+        _recordAsyncTiming(testStdoutTag, durationNs, runtimes);
+
+        if (!hasExternalLoopRunner && getPerfStabilityCheck() && runtimes.length >= getPerfMinLoops()) {
+            const window = getStabilityWindow();
+            if (shouldStopStability(runtimes, window, getPerfMinLoops())) {
+                sharedPerfState.stableInvocations[invocationKey] = true;
+                break;
+            }
+        }
+
+        if (!hasExternalLoopRunner && lastError) {
             break;
         }
     }
 
     if (lastError) throw lastError;
+
+    if (lastReturnValue === undefined && !lastError) {
+        return await fn(...args);
+    }
+
     return lastReturnValue;
 }
 
@@ -1066,6 +1225,7 @@ function resetPerfState() {
     sharedPerfState.shouldStop = false;
     sharedPerfState.invocationRuntimes = {};
     sharedPerfState.stableInvocations = {};
+    sharedPerfState.calibrationCache = {};
 }
 
 /**
@@ -1166,4 +1326,6 @@ module.exports = {
     getPerfTargetDurationMs,
     getPerfStabilityCheck,
     getPerfCurrentBatch,
+    getPerfWarmupIterations,
+    getPerfMinTimeNs,
 };

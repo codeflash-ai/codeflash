@@ -129,16 +129,12 @@ def compare_test_results(
                 )
             except Exception as e:
                 logger.error(e)
-        elif (
-            not pass_fail_only
-            and (original_test_result.stdout and cdd_test_result.stdout)
-            and not comparator(original_test_result.stdout, cdd_test_result.stdout)
-        ):
+        elif not pass_fail_only and not comparator(original_test_result.stdout or "", cdd_test_result.stdout or ""):
             test_diffs.append(
                 TestDiff(
                     scope=TestDiffScope.STDOUT,
-                    original_value=str(original_test_result.stdout),
-                    candidate_value=str(cdd_test_result.stdout),
+                    original_value=original_test_result.stdout or "",
+                    candidate_value=cdd_test_result.stdout or "",
                     test_src_code=original_test_result.id.get_src_code(original_test_result.file_name),
                     candidate_pytest_error=cdd_pytest_error,
                     original_pass=original_test_result.did_pass,
