@@ -17,6 +17,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.init_javascript import get_package_install_command
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
+from codeflash.languages.javascript.command_utils import resolve_node_command_list
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
@@ -317,7 +318,7 @@ def _build_vitest_behavioral_command(
         Command list for subprocess execution.
 
     """
-    cmd = [
+    cmd = resolve_node_command_list([
         "npx",
         "vitest",
         "run",  # Single execution (not watch mode)
@@ -325,7 +326,7 @@ def _build_vitest_behavioral_command(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for deterministic timing
         "--pool=forks",  # Use child processes so timing markers flow to parent stdout
-    ]
+    ])
 
     # For monorepos with restrictive vitest configs (e.g., include: test/**/*.test.ts),
     # we need to create a custom config that allows all test patterns.
@@ -379,7 +380,7 @@ def _build_vitest_benchmarking_command(
         Command list for subprocess execution.
 
     """
-    cmd = [
+    cmd = resolve_node_command_list([
         "npx",
         "vitest",
         "run",  # Single execution (not watch mode)
@@ -387,7 +388,7 @@ def _build_vitest_benchmarking_command(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent benchmarking
         "--pool=forks",  # Use child processes so timing markers flow to parent stdout
-    ]
+    ])
 
     # Use codeflash vitest config to override restrictive include patterns
     if project_root:
@@ -805,7 +806,7 @@ def run_vitest_line_profile_tests(
     _ensure_runtime_files(effective_cwd)
 
     # Build Vitest command for line profiling - simple run without benchmarking loops
-    vitest_cmd = [
+    vitest_cmd = resolve_node_command_list([
         "npx",
         "vitest",
         "run",
@@ -813,7 +814,7 @@ def run_vitest_line_profile_tests(
         "--reporter=junit",
         "--no-file-parallelism",  # Serial execution for consistent line profiling
         "--pool=forks",  # Use child processes so timing markers flow to parent stdout
-    ]
+    ])
 
     # Use codeflash vitest config to override restrictive include patterns
     if effective_cwd:

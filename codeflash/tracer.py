@@ -37,6 +37,42 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _build_tracer_parser(*, prog: str | None = None) -> ArgumentParser:
+    parser = ArgumentParser(allow_abbrev=False, prog=prog)
+    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
+    parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
+    parser.add_argument(
+        "--max-function-count",
+        help="Maximum number of inputs for one function to include in the trace.",
+        type=int,
+        default=256,
+    )
+    parser.add_argument(
+        "--tracer-timeout",
+        help="Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing stops and "
+        "normal execution continues.",
+        type=float,
+        default=None,
+    )
+    parser.add_argument("-m", action="store_true", dest="module", help="Trace a library module", default=False)
+    parser.add_argument(
+        "--codeflash-config",
+        help="Optional path to the project's pyproject.toml file "
+        "with the codeflash config. Will be auto-discovered if not specified.",
+        default=None,
+    )
+    parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit the number of test files to process (for -m pytest mode)"
+    )
+    parser.add_argument(
+        "--language",
+        help="Language to trace (python, javascript, typescript). Auto-detected if not specified.",
+        default=None,
+    )
+    return parser
+
+
 def _detect_non_python_language(args: Namespace | None) -> Language | None:
     """Detect if the project uses a non-Python language from --file or config.
 
@@ -96,6 +132,11 @@ def _detect_non_python_language(args: Namespace | None) -> Language | None:
 
 
 def main(args: Namespace | None = None) -> ArgumentParser:
+    if any(arg in {"-h", "--help"} for arg in sys.argv[1:]):
+        parser = _build_tracer_parser(prog="codeflash optimize")
+        parser.print_help()
+        return parser
+
     # For non-Python languages, detect early and route to the appropriate handler.
     # Java, JavaScript, and TypeScript use their own test runners (Maven/JUnit, Jest)
     # and should not go through Python tracing.
@@ -122,38 +163,7 @@ def main(args: Namespace | None = None) -> ArgumentParser:
         if detected_language == Language.JAVA:
             return _run_java_tracer(args)
 
-    parser = ArgumentParser(allow_abbrev=False)
-    parser.add_argument("-o", "--outfile", dest="outfile", help="Save trace to <outfile>", default="codeflash.trace")
-    parser.add_argument("--only-functions", help="Trace only these functions", nargs="+", default=None)
-    parser.add_argument(
-        "--max-function-count",
-        help="Maximum number of inputs for one function to include in the trace.",
-        type=int,
-        default=256,
-    )
-    parser.add_argument(
-        "--tracer-timeout",
-        help="Timeout in seconds for the tracer, if the traced code takes more than this time, then tracing stops and "
-        "normal execution continues.",
-        type=float,
-        default=None,
-    )
-    parser.add_argument("-m", action="store_true", dest="module", help="Trace a library module", default=False)
-    parser.add_argument(
-        "--codeflash-config",
-        help="Optional path to the project's pyproject.toml file "
-        "with the codeflash config. Will be auto-discovered if not specified.",
-        default=None,
-    )
-    parser.add_argument("--trace-only", action="store_true", help="Trace and create replay tests only, don't optimize")
-    parser.add_argument(
-        "--limit", type=int, default=None, help="Limit the number of test files to process (for -m pytest mode)"
-    )
-    parser.add_argument(
-        "--language",
-        help="Language to trace (python, javascript, typescript). Auto-detected if not specified.",
-        default=None,
-    )
+    parser = _build_tracer_parser()
 
     if args is not None:
         parsed_args = args

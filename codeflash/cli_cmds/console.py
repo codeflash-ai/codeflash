@@ -41,7 +41,42 @@ if TYPE_CHECKING:
 
 DEBUG_MODE = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
+
+def _configure_stdio_for_unicode_safety() -> None:
+    """Avoid hard failures when the active console encoding can't represent Unicode."""
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            with contextlib.suppress(OSError, ValueError):
+                reconfigure(errors="replace")
+
+
+def _can_encode(text: str) -> bool:
+    encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+    try:
+        text.encode(encoding)
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
+_configure_stdio_for_unicode_safety()
+
 console = Console(highlighter=NullHighlighter())
+
+_original_console_rule = console.rule
+
+
+def _safe_console_rule(title: str = "", *args: object, **kwargs: object) -> None:
+    if "characters" not in kwargs and not _can_encode("─"):
+        kwargs["characters"] = "-"
+    if title and not _can_encode(title):
+        encoding = getattr(sys.stdout, "encoding", None) or "utf-8"
+        title = title.encode(encoding, errors="replace").decode(encoding, errors="replace")
+    _original_console_rule(title, *args, **kwargs)
+
+
+console.rule = _safe_console_rule  # type: ignore[method-assign]
 
 if is_LSP_enabled() or is_subagent_mode():
     console.quiet = True

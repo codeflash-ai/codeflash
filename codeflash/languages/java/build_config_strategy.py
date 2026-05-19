@@ -346,10 +346,15 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
     Returns None if no Java build tool is detected.
     """
     from codeflash.languages.java.build_tools import BuildTool, detect_build_tool, find_source_root, find_test_root
+    from codeflash.languages.java.config import detect_java_project
 
     build_tool = detect_build_tool(project_root)
     if build_tool == BuildTool.UNKNOWN:
         return None
+
+    detected_project = detect_java_project(project_root)
+    test_framework = detected_project.test_framework if detected_project is not None else "junit5"
+    test_command = "mvn test" if build_tool == BuildTool.MAVEN else "./gradlew test"
 
     try:
         strategy = get_config_strategy(project_root)
@@ -379,7 +384,8 @@ def parse_java_project_config(project_root: Path) -> dict[str, Any] | None:
             if "testsRoot" in user_config
             else (test_root or (default_test if default_test.is_dir() else project_root))
         ),
-        "pytest_cmd": "pytest",
+        "pytest_cmd": test_command,
+        "test_framework": test_framework,
         "git_remote": user_config.get("gitRemote", "origin"),
         "disable_telemetry": user_config.get("disableTelemetry", "false").lower() == "true",
         "disable_imports_sorting": False,

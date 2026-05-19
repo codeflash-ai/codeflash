@@ -40,7 +40,7 @@ def _get_theme() -> Any:
     return CodeflashTheme()
 
 
-def init_go_project() -> None:
+def init_go_project(*, skip_confirm: bool = False, skip_api_key: bool = False) -> None:
     from codeflash.cli_cmds.github_workflow import install_github_actions
     from codeflash.cli_cmds.init_auth import install_github_app, prompt_api_key
 
@@ -54,14 +54,14 @@ def init_go_project() -> None:
     console.print(lang_panel)
     console.print()
 
-    did_add_new_key = prompt_api_key()
+    did_add_new_key = False if skip_api_key else prompt_api_key()
 
-    setup_info = collect_go_setup_info()
+    setup_info = collect_go_setup_info(skip_confirm=skip_confirm)
     git_remote = setup_info.git_remote or "origin"
 
     install_github_app(git_remote)
 
-    install_github_actions(override_formatter_check=True)
+    install_github_actions(override_formatter_check=True, skip_confirm=skip_confirm)
 
     usage_table = Table(show_header=False, show_lines=False, border_style="dim")
     usage_table.add_column("Command", style="cyan")
@@ -95,7 +95,7 @@ def init_go_project() -> None:
     sys.exit(0)
 
 
-def collect_go_setup_info() -> GoSetupInfo:
+def collect_go_setup_info(*, skip_confirm: bool = False) -> GoSetupInfo:
 
     from codeflash.cli_cmds.init_config import ask_for_telemetry
 
@@ -129,6 +129,10 @@ def collect_go_setup_info() -> GoSetupInfo:
     console.print(detection_panel)
     console.print()
 
+    if skip_confirm:
+        git_remote = _get_git_remote_for_setup(skip_confirm=True)
+        return GoSetupInfo(git_remote=git_remote, disable_telemetry=False)
+
     git_remote = _get_git_remote_for_setup()
 
     disable_telemetry = not ask_for_telemetry()
@@ -136,7 +140,7 @@ def collect_go_setup_info() -> GoSetupInfo:
     return GoSetupInfo(git_remote=git_remote, disable_telemetry=disable_telemetry)
 
 
-def _get_git_remote_for_setup() -> str:
+def _get_git_remote_for_setup(*, skip_confirm: bool = False) -> str:
     try:
         repo = Repo(Path.cwd(), search_parent_directories=True)
         git_remotes = get_git_remotes(repo)
@@ -145,6 +149,8 @@ def _get_git_remote_for_setup() -> str:
 
         if len(git_remotes) == 1:
             return git_remotes[0]
+        if skip_confirm:
+            return "origin" if "origin" in git_remotes else git_remotes[0]
 
         git_panel = Panel(
             Text(

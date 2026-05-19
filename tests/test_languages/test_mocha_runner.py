@@ -329,7 +329,7 @@ class TestMochaBehavioralCommand:
             test_file.write_text("// test")
 
             cmd = _build_mocha_behavioral_command(test_files=[test_file])
-            assert "npx" in cmd
+            assert Path(cmd[0]).stem.lower() == "npx"
             assert "mocha" in cmd
             assert "--reporter" in cmd
             assert "json" in cmd
@@ -371,7 +371,7 @@ class TestMochaBenchmarkingCommand:
             test_file.write_text("// test")
 
             cmd = _build_mocha_benchmarking_command(test_files=[test_file])
-            assert "npx" in cmd
+            assert Path(cmd[0]).stem.lower() == "npx"
             assert "mocha" in cmd
             assert "--exit" in cmd
 
@@ -398,7 +398,7 @@ class TestMochaLineProfileCommand:
             test_file.write_text("// test")
 
             cmd = _build_mocha_line_profile_command(test_files=[test_file])
-            assert "npx" in cmd
+            assert Path(cmd[0]).stem.lower() == "npx"
             assert "mocha" in cmd
             assert "--exit" in cmd
 

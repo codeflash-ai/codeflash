@@ -98,9 +98,10 @@ class TestVerifyRequirements:
         """Test verification fails when npm is not available."""
 
         def mock_run_side_effect(cmd, **kwargs):
-            if cmd[0] == "node":
+            command_name = Path(cmd[0]).stem.lower()
+            if command_name == "node":
                 return MagicMock(returncode=0)
-            if cmd[0] == "npm":
+            if command_name == "npm":
                 raise FileNotFoundError("npm not found")
             return MagicMock(returncode=0)
 
@@ -110,6 +111,29 @@ class TestVerifyRequirements:
             assert success is False
             npm_error_found = any("npm" in error.message for error in errors)
             assert npm_error_found is True
+
+    def test_verify_requirements_accepts_windows_cmd_wrappers(self, js_support, project_with_jest):
+        resolved_commands = {
+            "node": r"C:\nvm4w\nodejs\node.exe",
+            "npm": r"C:\nvm4w\nodejs\npm.cmd",
+        }
+
+        def mock_run_side_effect(cmd, **kwargs):
+            command_name = Path(cmd[0]).stem.lower()
+            assert cmd[0] == resolved_commands[command_name]
+            return MagicMock(returncode=0)
+
+        with (
+            patch(
+                "codeflash.languages.javascript.support.resolve_node_command",
+                side_effect=lambda command: resolved_commands[command],
+            ),
+            patch("subprocess.run", side_effect=mock_run_side_effect),
+        ):
+            success, errors = js_support.verify_requirements(project_with_jest, "jest")
+
+            assert success is True
+            assert errors == []
 
     def test_verify_requirements_fails_without_node_modules(self, js_support, project_without_node_modules):
         """Test verification fails when node_modules doesn't exist."""

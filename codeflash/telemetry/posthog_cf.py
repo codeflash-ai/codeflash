@@ -35,18 +35,21 @@ def ph(event: str, properties: dict[str, Any] | None = None) -> None:
     if _posthog is None:
         return
 
-    from codeflash.api.cfapi import get_user_id
-    from codeflash.lsp.helpers import is_subagent_mode
-    from codeflash.version import __version__
+    from codeflash.cli_cmds.console import logger
 
-    properties = properties or {}
-    properties.update({"cli_version": __version__, "subagent": is_subagent_mode()})
+    try:
+        from codeflash.api.cfapi import get_user_id
+        from codeflash.lsp.helpers import is_subagent_mode
+        from codeflash.version import __version__
 
-    user_id = get_user_id()
+        properties = properties or {}
+        properties.update({"cli_version": __version__, "subagent": is_subagent_mode()})
 
-    if user_id:
-        _posthog.capture(distinct_id=user_id, event=event, properties=properties)
-    else:
-        from codeflash.cli_cmds.console import logger
+        user_id = get_user_id(suppress_errors=True)
 
-        logger.debug("Failed to log event to PostHog: User ID could not be retrieved.")
+        if user_id:
+            _posthog.capture(distinct_id=user_id, event=event, properties=properties)
+        else:
+            logger.debug("Failed to log event to PostHog: User ID could not be retrieved.")
+    except (Exception, SystemExit) as exc:
+        logger.debug("Failed to log event to PostHog: %s", exc)

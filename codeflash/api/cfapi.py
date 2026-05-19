@@ -102,10 +102,11 @@ def make_cfapi_request(
 
 
 @lru_cache(maxsize=1)
-def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
+def get_user_id(api_key: Optional[str] = None, *, suppress_errors: bool = False) -> Optional[str]:
     """Retrieve the user's userid by making a request to the /cfapi/cli-get-user endpoint.
 
     :param api_key: The API key to use. If None, uses get_codeflash_api_key().
+    :param suppress_errors: If True, avoid exiting on auth/version errors and return None instead.
     :return: The userid or None if the request fails.
     """
     lsp_enabled = is_LSP_enabled()
@@ -129,6 +130,9 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
             if min_version and version.parse(min_version) > version.parse(__version__):
                 msg = "Your Codeflash CLI version is outdated. Please update to the latest version using `pip install --upgrade codeflash`."
                 console.print(f"[bold red]{msg}[/bold red]")
+                if suppress_errors:
+                    logger.debug(msg)
+                    return None
                 if lsp_enabled:
                     logger.debug(msg)
                     return f"Error: {msg}"
@@ -140,6 +144,9 @@ def get_user_id(api_key: Optional[str] = None) -> Optional[str]:
 
     if response.status_code == 403:
         error_title = "Invalid Codeflash API key. The API key you provided is not valid."
+        if suppress_errors:
+            logger.debug(error_title)
+            return None
         if lsp_enabled:
             return f"Error: {error_title}"
         msg = (

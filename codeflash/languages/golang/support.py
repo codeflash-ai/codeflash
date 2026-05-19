@@ -42,9 +42,21 @@ logger = logging.getLogger(__name__)
 @register_language
 class GoSupport(LanguageSupport):
     def __init__(self) -> None:
-        self._analyzer = GoAnalyzer()
+        self._analyzer: GoAnalyzer | None = None
         self._go_version: str | None = None
         self._go_version_detected = False
+
+    def _get_analyzer(self) -> GoAnalyzer:
+        if self._analyzer is None:
+            try:
+                self._analyzer = GoAnalyzer()
+            except ModuleNotFoundError as exc:
+                msg = (
+                    "Go support requires the tree-sitter Go parser. "
+                    "Reinstall or sync Codeflash dependencies to enable Go optimization."
+                )
+                raise ModuleNotFoundError(msg) from exc
+        return self._analyzer
 
     @property
     def language(self) -> Language:
@@ -94,7 +106,7 @@ class GoSupport(LanguageSupport):
     def discover_functions(
         self, source: str, file_path: Path, filter_criteria: FunctionFilterCriteria | None = None
     ) -> list[FunctionToOptimize]:
-        return discover_functions_from_source(source, file_path, filter_criteria, self._analyzer)
+        return discover_functions_from_source(source, file_path, filter_criteria, self._get_analyzer())
 
     def discover_tests(
         self, test_root: Path, source_functions: Sequence[FunctionToOptimize]
@@ -102,7 +114,7 @@ class GoSupport(LanguageSupport):
         return _discover_tests(test_root, source_functions)
 
     def validate_syntax(self, source: str, file_path: Path | None = None) -> bool:
-        return self._analyzer.validate_syntax(source)
+        return self._get_analyzer().validate_syntax(source)
 
     def parse_test_xml(
         self, test_xml_file_path: Path, test_files: Any, test_config: Any, run_result: Any = None
@@ -112,14 +124,14 @@ class GoSupport(LanguageSupport):
         return parse_go_test_output(test_xml_file_path, test_files, test_config, run_result)
 
     def extract_code_context(self, function: FunctionToOptimize, project_root: Path, module_root: Path) -> CodeContext:
-        return _extract_context(function, project_root, module_root, self._analyzer)
+        return _extract_context(function, project_root, module_root, self._get_analyzer())
 
     def find_helper_functions(self, function: FunctionToOptimize, project_root: Path) -> list[HelperFunction]:
         try:
             source = function.file_path.read_text(encoding="utf-8")
         except Exception:
             return []
-        return _find_helpers(source, function, self._analyzer)
+        return _find_helpers(source, function, self._get_analyzer())
 
     def find_references(
         self, function: FunctionToOptimize, project_root: Path, tests_root: Path | None = None, max_files: int = 100
@@ -127,7 +139,7 @@ class GoSupport(LanguageSupport):
         return []
 
     def replace_function(self, source: str, function: FunctionToOptimize, new_source: str) -> str:
-        return _replace_func(source, function, new_source, self._analyzer)
+        return _replace_func(source, function, new_source, self._get_analyzer())
 
     def format_code(self, source: str, file_path: Path | None = None) -> str:
         return format_go_code(source, file_path)
@@ -136,7 +148,7 @@ class GoSupport(LanguageSupport):
         return normalize_go_code(source)
 
     def add_global_declarations(self, optimized_code: str, original_source: str, module_abspath: Path) -> str:
-        return _add_globals(optimized_code, original_source, self._analyzer)
+        return _add_globals(optimized_code, original_source, self._get_analyzer())
 
     def get_module_path(self, source_file: Path, project_root: Path, tests_root: Path | None = None) -> str:
         return str(source_file)
@@ -146,7 +158,7 @@ class GoSupport(LanguageSupport):
     ) -> tuple[dict[Path, Any], None] | None:
         from codeflash.models.models import ValidCode
 
-        if not self._analyzer.validate_syntax(module_code):
+        if not self._get_analyzer().validate_syntax(module_code):
             return None
         validated: dict[Path, ValidCode] = {
             module_path: ValidCode(source_code=module_code, normalized_code=normalize_go_code(module_code))
@@ -298,7 +310,7 @@ class GoSupport(LanguageSupport):
         return test_source
 
     def remove_test_functions(self, test_source: str, functions_to_remove: list[str]) -> str:
-        return _remove_tests(test_source, functions_to_remove, self._analyzer)
+        return _remove_tests(test_source, functions_to_remove, self._get_analyzer())
 
     def add_runtime_comments_to_generated_tests(
         self,

@@ -773,8 +773,10 @@ def was_function_previously_optimized(
     # already_optimized_count = 0
     owner = None
     repo = None
-    with contextlib.suppress(git.exc.InvalidGitRepositoryError):
-        owner, repo = get_repo_owner_and_name()
+    try:
+        owner, repo = get_repo_owner_and_name(git_remote=getattr(args, "git_remote", "origin"))
+    except Exception as exc:
+        logger.debug("Skipping previous optimization lookup because repository metadata is unavailable: %s", exc)
 
     pr_number = get_pr_number()
 
