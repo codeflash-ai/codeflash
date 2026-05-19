@@ -1,6 +1,7 @@
 """Tests for JavaScript/TypeScript project initialization and package manager detection."""
 
 import json
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -17,9 +18,15 @@ from codeflash.cli_cmds.init_javascript import (
 
 
 @pytest.fixture
-def tmp_project(tmp_path: Path) -> Path:
-    """Create a temporary project directory."""
-    return tmp_path
+def tmp_project() -> Path:
+    """Create a temporary project directory with a deterministic parent chain."""
+    with tempfile.TemporaryDirectory(dir=Path.cwd()) as tmp_dir:
+        yield Path(tmp_dir)
+
+
+def assert_install_command(actual: list[str], executable: str, expected_args: list[str]) -> None:
+    assert Path(actual[0]).stem.lower() == executable
+    assert actual[1:] == expected_args
 
 
 class TestDetermineJsPackageManager:
@@ -206,7 +213,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=True)
 
-        assert result == ["npm", "install", "codeflash", "--save-dev"]
+        assert_install_command(result, "npm", ["install", "codeflash", "--save-dev"])
 
     def test_npm_install_command_non_dev(self, tmp_project: Path) -> None:
         """Should return npm install command without --save-dev when dev=False."""
@@ -215,7 +222,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=False)
 
-        assert result == ["npm", "install", "codeflash"]
+        assert_install_command(result, "npm", ["install", "codeflash"])
 
     def test_pnpm_add_command(self, tmp_project: Path) -> None:
         """Should return pnpm add command for pnpm projects."""
@@ -224,7 +231,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=True)
 
-        assert result == ["pnpm", "add", "codeflash", "--save-dev"]
+        assert_install_command(result, "pnpm", ["add", "codeflash", "--save-dev"])
 
     def test_pnpm_add_command_non_dev(self, tmp_project: Path) -> None:
         """Should return pnpm add command without --save-dev when dev=False."""
@@ -233,7 +240,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=False)
 
-        assert result == ["pnpm", "add", "codeflash"]
+        assert_install_command(result, "pnpm", ["add", "codeflash"])
 
     def test_yarn_add_command(self, tmp_project: Path) -> None:
         """Should return yarn add command for yarn projects."""
@@ -242,7 +249,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=True)
 
-        assert result == ["yarn", "add", "codeflash", "--dev"]
+        assert_install_command(result, "yarn", ["add", "codeflash", "--dev"])
 
     def test_yarn_add_command_non_dev(self, tmp_project: Path) -> None:
         """Should return yarn add command without --dev when dev=False."""
@@ -251,7 +258,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=False)
 
-        assert result == ["yarn", "add", "codeflash"]
+        assert_install_command(result, "yarn", ["add", "codeflash"])
 
     def test_bun_add_command(self, tmp_project: Path) -> None:
         """Should return bun add command for bun projects."""
@@ -260,7 +267,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=True)
 
-        assert result == ["bun", "add", "codeflash", "--dev"]
+        assert_install_command(result, "bun", ["add", "codeflash", "--dev"])
 
     def test_bun_add_command_non_dev(self, tmp_project: Path) -> None:
         """Should return bun add command without --dev when dev=False."""
@@ -269,14 +276,14 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "codeflash", dev=False)
 
-        assert result == ["bun", "add", "codeflash"]
+        assert_install_command(result, "bun", ["add", "codeflash"])
 
     def test_defaults_to_npm_for_unknown(self, tmp_project: Path) -> None:
         """Should default to npm for unknown package manager."""
         # No lockfile, no package.json - unknown package manager
         result = get_package_install_command(tmp_project, "codeflash", dev=True)
 
-        assert result == ["npm", "install", "codeflash", "--save-dev"]
+        assert_install_command(result, "npm", ["install", "codeflash", "--save-dev"])
 
     def test_different_package_name(self, tmp_project: Path) -> None:
         """Should work with different package names."""
@@ -285,7 +292,7 @@ class TestGetPackageInstallCommand:
 
         result = get_package_install_command(tmp_project, "typescript", dev=True)
 
-        assert result == ["pnpm", "add", "typescript", "--save-dev"]
+        assert_install_command(result, "pnpm", ["add", "typescript", "--save-dev"])
 
 
 class TestShouldModifySkipConfirm:

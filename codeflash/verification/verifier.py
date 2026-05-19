@@ -61,10 +61,11 @@ def generate_tests(
 
         source_file_abs = source_file.resolve().with_suffix("")
         test_dir_abs = test_path.resolve().parent
-        # Compute relative path from test directory to source file
-        rel_import_path = os.path.relpath(str(source_file_abs), str(test_dir_abs))
+        # Compute relative path from test directory to source file.
+        # JavaScript import specifiers must always use forward slashes, even on Windows.
+        rel_import_path = os.path.relpath(str(source_file_abs), str(test_dir_abs)).replace("\\", "/")
         # Ensure path starts with ./ or ../ for JavaScript/TypeScript imports
-        if not rel_import_path.startswith("../"):
+        if not rel_import_path.startswith(("../", "./")):
             rel_import_path = f"./{rel_import_path}"
         # ESM requires explicit file extensions in import specifiers.
         # TypeScript ESM also uses .js extensions (TS resolves .js → .ts).

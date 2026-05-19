@@ -4,7 +4,7 @@ Tests the verify_requirements function that checks Node.js, npm, and test framew
 """
 
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -14,6 +14,12 @@ from codeflash.languages.javascript.support import JavaScriptSupport
 
 class TestVerifyRequirements:
     """Tests for JavaScriptSupport.verify_requirements()."""
+
+    @staticmethod
+    def _command_name(command: str) -> str:
+        if "\\" in command:
+            return PureWindowsPath(command).stem.lower()
+        return Path(command).stem.lower()
 
     @pytest.fixture
     def js_support(self):
@@ -98,7 +104,7 @@ class TestVerifyRequirements:
         """Test verification fails when npm is not available."""
 
         def mock_run_side_effect(cmd, **kwargs):
-            command_name = Path(cmd[0]).stem.lower()
+            command_name = self._command_name(cmd[0])
             if command_name == "node":
                 return MagicMock(returncode=0)
             if command_name == "npm":
@@ -113,13 +119,10 @@ class TestVerifyRequirements:
             assert npm_error_found is True
 
     def test_verify_requirements_accepts_windows_cmd_wrappers(self, js_support, project_with_jest):
-        resolved_commands = {
-            "node": r"C:\nvm4w\nodejs\node.exe",
-            "npm": r"C:\nvm4w\nodejs\npm.cmd",
-        }
+        resolved_commands = {"node": r"C:\nvm4w\nodejs\node.exe", "npm": r"C:\nvm4w\nodejs\npm.cmd"}
 
         def mock_run_side_effect(cmd, **kwargs):
-            command_name = Path(cmd[0]).stem.lower()
+            command_name = self._command_name(cmd[0])
             assert cmd[0] == resolved_commands[command_name]
             return MagicMock(returncode=0)
 

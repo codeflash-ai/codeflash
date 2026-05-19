@@ -60,6 +60,10 @@ def apply_formatter_cmds(
     for command in cmds:
         formatter_cmd_list = shlex.split(command, posix=os.name != "nt")
         formatter_cmd_list = [file_path.as_posix() if chunk == file_token else chunk for chunk in formatter_cmd_list]
+        if str(lang_support.language) in ("javascript", "typescript"):
+            from codeflash.languages.javascript.command_utils import resolve_node_command_list
+
+            formatter_cmd_list = resolve_node_command_list(formatter_cmd_list)
         try:
             result = subprocess.run(formatter_cmd_list, capture_output=True, check=False)
             if result.returncode == 0:
