@@ -966,9 +966,7 @@ def _customize_java_workflow_content(optimize_yml_content: str, git_root: Path) 
     return optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps)
 
 
-def _customize_go_workflow_content(
-    optimize_yml_content: str, git_root: Path, benchmark_mode: bool = False
-) -> str:
+def _customize_go_workflow_content(optimize_yml_content: str, git_root: Path, benchmark_mode: bool = False) -> str:
     """Customize workflow content for Go projects."""
     from codeflash.cli_cmds.init_go import get_go_dependency_installation_commands, get_go_runtime_setup_steps
 

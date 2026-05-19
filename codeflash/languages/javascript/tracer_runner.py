@@ -36,7 +36,9 @@ def find_trace_runner() -> Optional[Path]:
         return local_path
 
     try:
-        result = subprocess.run(resolve_node_command_list(["npm", "root", "-g"]), capture_output=True, text=True, check=True)
+        result = subprocess.run(
+            resolve_node_command_list(["npm", "root", "-g"]), capture_output=True, text=True, check=True
+        )
         global_modules = Path(result.stdout.strip())
         global_path = global_modules / "codeflash" / "runtime" / "trace-runner.js"
         if global_path.exists():

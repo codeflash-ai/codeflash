@@ -1607,15 +1607,17 @@ class JavaScriptSupport:
 
         # Build Jest command
         test_pattern = "|".join(str(f) for f in test_files)
-        cmd = resolve_node_command_list([
-            "npx",
-            "jest",
-            "--reporters=default",
-            "--reporters=jest-junit",
-            f"--testPathPattern={test_pattern}",
-            "--runInBand",  # Sequential for deterministic timing
-            "--forceExit",
-        ])
+        cmd = resolve_node_command_list(
+            [
+                "npx",
+                "jest",
+                "--reporters=default",
+                "--reporters=jest-junit",
+                f"--testPathPattern={test_pattern}",
+                "--runInBand",  # Sequential for deterministic timing
+                "--forceExit",
+            ]
+        )
 
         test_env = env.copy()
         test_env["JEST_JUNIT_OUTPUT_FILE"] = str(junit_xml)
