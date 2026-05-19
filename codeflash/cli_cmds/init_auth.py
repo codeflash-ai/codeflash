@@ -147,7 +147,17 @@ def enter_api_key_and_save_to_rc() -> None:
     os.environ["CODEFLASH_API_KEY"] = api_key
 
 
+def _skip_github_app_installation(owner: str, repo: str) -> None:
+    click.echo(
+        f"Skipping Codeflash GitHub app installation for {owner}/{repo}.{LF}"
+        "Codeflash setup will continue, but PR creation will stay disabled until you install the app later."
+        f"{LF}In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}"
+    )
+
+
 def install_github_app(git_remote: str) -> None:
+    from rich.prompt import Confirm
+
     try:
         git_repo = git.Repo(search_parent_directories=True)
     except git.InvalidGitRepositoryError:
@@ -167,6 +177,17 @@ def install_github_app(git_remote: str) -> None:
 
     else:
         try:
+            should_install = Confirm.ask(
+                "Do you want to install the Codeflash GitHub app now? You can skip this and continue setup, "
+                "but Codeflash won't be able to create PRs until the app is installed.",
+                default=True,
+                show_default=True,
+                console=console,
+            )
+            if not should_install:
+                _skip_github_app_installation(owner, repo)
+                return
+
             click.prompt(
                 f"Finally, you'll need to install the Codeflash GitHub app by choosing the repository you want to install Codeflash on.{LF}"
                 f"I will attempt to open the github app page - https://github.com/apps/codeflash-ai/installations/select_target {LF}"
@@ -188,11 +209,7 @@ def install_github_app(git_remote: str) -> None:
             count = 2
             while not is_github_app_installed_on_repo(owner, repo, suppress_errors=True):
                 if count == 0:
-                    click.echo(
-                        f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
-                        f"You won't be able to create PRs with Codeflash until you install the app.{LF}"
-                        f"In the meantime you can make local only optimizations by using the '--no-pr' flag with codeflash.{LF}"
-                    )
+                    _skip_github_app_installation(owner, repo)
                     break
                 click.prompt(
                     f"❌ It looks like the Codeflash GitHub App is not installed on the repository {owner}/{repo}.{LF}"
@@ -207,3 +224,4 @@ def install_github_app(git_remote: str) -> None:
         except (KeyboardInterrupt, EOFError, click.exceptions.Abort):
             # leave empty line for the next prompt to be properly rendered
             click.echo()
+            _skip_github_app_installation(owner, repo)
