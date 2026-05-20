@@ -142,7 +142,7 @@ def is_valid_pyproject_toml(pyproject_toml_path: Union[str, Path]) -> tuple[bool
     return True, config, ""
 
 
-def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
+def should_modify_pyproject_toml(*, skip_confirm: bool = False) -> tuple[bool, dict[str, Any] | None]:
     """Check if the current directory contains a valid pyproject.toml file with codeflash config.
 
     If it does, ask the user if they want to re-configure it.
@@ -159,6 +159,9 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     if not valid:
         # needs to be re-configured
         return True, None
+
+    if skip_confirm:
+        return False, config
 
     return Confirm.ask(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",

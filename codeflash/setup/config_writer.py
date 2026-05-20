@@ -83,7 +83,7 @@ def _write_pyproject_toml(project_root: Path, config: CodeflashConfig) -> tuple[
         doc["tool"]["codeflash"] = codeflash_table
 
         # Write back
-        with pyproject_path.open("w", encoding="utf8") as f:
+        with pyproject_path.open("w", encoding="utf8", newline="") as f:
             f.write(tomlkit.dumps(doc))
 
         return True, f"Config saved to {pyproject_path}"
@@ -207,7 +207,7 @@ def _remove_from_pyproject(project_root: Path) -> tuple[bool, str]:
         if "tool" in doc and "codeflash" in doc["tool"]:
             del doc["tool"]["codeflash"]
 
-            with pyproject_path.open("w", encoding="utf8") as f:
+            with pyproject_path.open("w", encoding="utf8", newline="") as f:
                 f.write(tomlkit.dumps(doc))
 
             return True, "Removed [tool.codeflash] section from pyproject.toml"

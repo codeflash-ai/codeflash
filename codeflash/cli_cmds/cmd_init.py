@@ -78,23 +78,22 @@ def init_codeflash(*, skip_confirm: bool = False, skip_api_key: bool = False) ->
         did_add_new_key = False if skip_api_key else prompt_api_key()
         git_remote = "origin"
 
-        if skip_confirm:
-            from codeflash.setup import detect_project, write_config
+        should_modify, config = should_modify_pyproject_toml(skip_confirm=skip_confirm)
+        git_remote = config.get("git_remote", "origin") if config else "origin"
 
-            detected = detect_project()
-            configured, message = write_config(detected)
-            if configured:
-                click.echo(message)
-                click.echo()
+        if should_modify:
+            if skip_confirm:
+                from codeflash.setup import detect_project, write_config
+
+                detected = detect_project()
+                configured, message = write_config(detected)
+                if configured:
+                    click.echo(message)
+                    click.echo()
+                else:
+                    click.echo(message)
+                    apologize_and_exit()
             else:
-                click.echo(message)
-                apologize_and_exit()
-        else:
-            should_modify, config = should_modify_pyproject_toml()
-
-            git_remote = config.get("git_remote", "origin") if config else "origin"
-
-            if should_modify:
                 setup_info = collect_setup_info()
                 git_remote = setup_info.git_remote
                 configured = configure_pyproject_toml(setup_info)

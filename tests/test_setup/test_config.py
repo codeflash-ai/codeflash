@@ -208,6 +208,27 @@ class TestWritePyprojectToml:
         assert data["tool"]["codeflash"]["module-root"] == "new"
         assert data["tool"]["codeflash"]["tests-root"] == "new_tests"
 
+    def test_preserves_crlf_newlines_for_existing_pyproject(self, tmp_path):
+        """Should not introduce doubled carriage returns when preserving CRLF files."""
+        pyproject_path = tmp_path / "pyproject.toml"
+        pyproject_path.write_bytes(b'[project]\r\nname = "myapp"\r\n\r\n[tool.ruff]\r\nline-length = 120\r\n')
+
+        config = CodeflashConfig(language="python", module_root="src")
+
+        success, message = _write_pyproject_toml(tmp_path, config)
+
+        assert success is True
+        assert message == f"Config saved to {pyproject_path}"
+
+        content = pyproject_path.read_bytes()
+        assert b"\r\r\n" not in content
+        assert b"\r\n" in content
+
+        data = tomlkit.parse(content)
+        assert data["project"]["name"] == "myapp"
+        assert data["tool"]["ruff"]["line-length"] == 120
+        assert data["tool"]["codeflash"]["module-root"] == "src"
+
 
 class TestWritePackageJson:
     """Tests for writing to package.json."""
