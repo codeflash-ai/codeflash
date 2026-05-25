@@ -4,6 +4,7 @@ import json
 
 import tomlkit
 
+from codeflash.code_utils.pyproject_utils import infer_minimal_project_name
 from codeflash.setup.config_schema import CodeflashConfig
 from codeflash.setup.config_writer import (
     _write_package_json,
@@ -170,8 +171,27 @@ class TestWritePyprojectToml:
         # Verify content
         content = (tmp_path / "pyproject.toml").read_text()
         data = tomlkit.parse(content)
+        assert data["project"]["name"] == infer_minimal_project_name(tmp_path)
+        assert data["project"]["version"] == "0.0.0"
         assert "tool" in data
         assert "codeflash" in data["tool"]
+        assert data["tool"]["codeflash"]["module-root"] == "src"
+
+    def test_adds_minimal_project_metadata_when_missing(self, tmp_path):
+        """Should add [project] metadata when pyproject.toml only has tool config."""
+        (tmp_path / "pyproject.toml").write_text("[tool.ruff]\nline-length = 120")
+
+        config = CodeflashConfig(language="python", module_root="src")
+
+        success, message = _write_pyproject_toml(tmp_path, config)
+
+        assert success is True
+
+        content = (tmp_path / "pyproject.toml").read_text()
+        data = tomlkit.parse(content)
+        assert data["project"]["name"] == infer_minimal_project_name(tmp_path)
+        assert data["project"]["version"] == "0.0.0"
+        assert data["tool"]["ruff"]["line-length"] == 120
         assert data["tool"]["codeflash"]["module-root"] == "src"
 
     def test_preserves_existing_content(self, tmp_path):
@@ -207,6 +227,22 @@ class TestWritePyprojectToml:
         data = tomlkit.parse(content)
         assert data["tool"]["codeflash"]["module-root"] == "new"
         assert data["tool"]["codeflash"]["tests-root"] == "new_tests"
+
+    def test_preserves_poetry_metadata_without_adding_project(self, tmp_path):
+        """Should not inject [project] into poetry-managed pyproject.toml files."""
+        (tmp_path / "pyproject.toml").write_text('[tool.poetry]\nname = "myapp"\nversion = "1.0.0"')
+
+        config = CodeflashConfig(language="python", module_root="src")
+
+        success, message = _write_pyproject_toml(tmp_path, config)
+
+        assert success is True
+
+        content = (tmp_path / "pyproject.toml").read_text()
+        data = tomlkit.parse(content)
+        assert "project" not in data
+        assert data["tool"]["poetry"]["name"] == "myapp"
+        assert data["tool"]["codeflash"]["module-root"] == "src"
 
     def test_preserves_crlf_newlines_for_existing_pyproject(self, tmp_path):
         """Should not introduce doubled carriage returns when preserving CRLF files."""

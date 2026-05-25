@@ -11,6 +11,7 @@ import json
 from typing import TYPE_CHECKING
 
 import tomlkit
+from codeflash.code_utils.pyproject_utils import ensure_minimal_project_metadata
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -65,6 +66,8 @@ def _write_pyproject_toml(project_root: Path, config: CodeflashConfig) -> tuple[
                 doc = tomlkit.parse(f.read())
         else:
             doc = tomlkit.document()
+
+        ensure_minimal_project_metadata(doc, project_root)
 
         # Ensure [tool] section exists
         if "tool" not in doc:

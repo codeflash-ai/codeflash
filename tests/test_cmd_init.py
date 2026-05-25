@@ -3,15 +3,18 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import tomlkit
 
 from codeflash.cli_cmds.init_config import (
     CLISetupInfo,
     VsCodeSetupInfo,
     configure_pyproject_toml,
+    create_empty_pyproject_toml,
     get_formatter_cmds,
     get_valid_subdirs,
     is_valid_pyproject_toml,
 )
+from codeflash.code_utils.pyproject_utils import infer_minimal_project_name
 
 
 @pytest.fixture
@@ -103,17 +106,14 @@ def test_configure_pyproject_toml_for_cli(temp_dir: Path) -> None:
         assert success
 
         config_content = pyproject_path.read_text()
-        assert (
-            config_content
-            == """[tool.codeflash]
-# All paths are relative to this pyproject.toml's directory.
-module-root = "."
-tests-root = "tests"
-ignore-paths = []
-disable-telemetry = true
-formatter-cmds = ["black $file"]
-"""
-        )
+        data = tomlkit.parse(config_content)
+        assert data["project"]["name"] == infer_minimal_project_name(temp_dir)
+        assert data["project"]["version"] == "0.0.0"
+        assert data["tool"]["codeflash"]["module-root"] == "."
+        assert data["tool"]["codeflash"]["tests-root"] == "tests"
+        assert data["tool"]["codeflash"]["ignore-paths"] == []
+        assert data["tool"]["codeflash"]["disable-telemetry"] is True
+        assert data["tool"]["codeflash"]["formatter-cmds"] == ["black $file"]
         valid, _, _ = is_valid_pyproject_toml(pyproject_path)
         assert valid
 
@@ -131,14 +131,12 @@ def test_configure_pyproject_toml_for_vscode_with_empty_config(temp_dir: Path) -
         assert success
 
         config_content = pyproject_path.read_text()
-        assert (
-            config_content
-            == """[tool.codeflash]
-module-root = "."
-tests-root = "tests"
-formatter-cmds = ["black $file"]
-"""
-        )
+        data = tomlkit.parse(config_content)
+        assert data["project"]["name"] == infer_minimal_project_name(temp_dir)
+        assert data["project"]["version"] == "0.0.0"
+        assert data["tool"]["codeflash"]["module-root"] == "."
+        assert data["tool"]["codeflash"]["tests-root"] == "tests"
+        assert data["tool"]["codeflash"]["formatter-cmds"] == ["black $file"]
         valid, _, _ = is_valid_pyproject_toml(pyproject_path)
         assert valid
 
@@ -162,15 +160,13 @@ formatter-cmds = ["disabled"]
 
         config_content = pyproject_path.read_text()
         # the benchmarks-root shouldn't get overwritten
-        assert (
-            config_content
-            == """[tool.codeflash]
-module-root = "."
-tests-root = "tests"
-benchmarks-root = "tests/benchmarks"
-formatter-cmds = ["disabled"]
-"""
-        )
+        data = tomlkit.parse(config_content)
+        assert data["project"]["name"] == infer_minimal_project_name(temp_dir)
+        assert data["project"]["version"] == "0.0.0"
+        assert data["tool"]["codeflash"]["module-root"] == "."
+        assert data["tool"]["codeflash"]["tests-root"] == "tests"
+        assert data["tool"]["codeflash"]["benchmarks-root"] == "tests/benchmarks"
+        assert data["tool"]["codeflash"]["formatter-cmds"] == ["disabled"]
         valid, _, _ = is_valid_pyproject_toml(pyproject_path)
         assert valid
 
@@ -186,3 +182,18 @@ def test_get_valid_subdirs(temp_dir: Path) -> None:
     assert "tests" in dirs
     assert "dir1" in dirs
     assert "dir2" in dirs
+
+
+def test_create_empty_pyproject_toml_adds_minimal_project_metadata(
+    temp_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pyproject_path = temp_dir / "pyproject.toml"
+    monkeypatch.setattr("codeflash.cli_cmds.init_config.is_LSP_enabled", lambda: True)
+    monkeypatch.setattr("codeflash.cli_cmds.init_config.ph", lambda *args, **kwargs: None)
+
+    create_empty_pyproject_toml(pyproject_path)
+
+    data = tomlkit.parse(pyproject_path.read_text())
+    assert data["project"]["name"] == infer_minimal_project_name(temp_dir)
+    assert data["project"]["version"] == "0.0.0"
+    assert data["tool"]["codeflash"] == {}
