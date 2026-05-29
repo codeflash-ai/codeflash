@@ -289,11 +289,15 @@ def _handle_show_config() -> None:
         from codeflash.code_utils.config_parser import parse_config_file
 
         config, config_file_path = parse_config_file()
-        status = "Saved config"
+        is_file_backed_config = config_file_path.is_file()
+        status = "Saved config" if is_file_backed_config else "Auto-detected (zero-config)"
 
         console.print()
         console.print(f"[bold]Codeflash Configuration[/bold] ({status})")
-        console.print(f"[dim]Config file: {config_file_path}[/dim]")
+        if is_file_backed_config:
+            console.print(f"[dim]Config file: {config_file_path}[/dim]")
+        else:
+            console.print(f"[dim]Config source: {config_file_path}[/dim]")
         console.print()
 
         table = Table(show_header=True, header_style="bold cyan")

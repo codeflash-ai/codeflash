@@ -28,6 +28,7 @@ from codeflash.code_utils.code_utils import validate_relative_directory_path
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_git_remotes
 from codeflash.code_utils.shell_utils import get_shell_rc_path, is_powershell
+from codeflash.languages.javascript.command_utils import resolve_node_command
 from codeflash.telemetry.posthog_cf import ph
 
 
@@ -201,22 +202,22 @@ def get_package_install_command(project_root: Path, package: str, dev: bool = Tr
     pkg_manager = determine_js_package_manager(project_root)
 
     if pkg_manager == JsPackageManager.PNPM:
-        cmd = ["pnpm", "add", package]
+        cmd = [resolve_node_command("pnpm"), "add", package]
         if dev:
             cmd.append("--save-dev")
         return cmd
     if pkg_manager == JsPackageManager.YARN:
-        cmd = ["yarn", "add", package]
+        cmd = [resolve_node_command("yarn"), "add", package]
         if dev:
             cmd.append("--dev")
         return cmd
     if pkg_manager == JsPackageManager.BUN:
-        cmd = ["bun", "add", package]
+        cmd = [resolve_node_command("bun"), "add", package]
         if dev:
             cmd.append("--dev")
         return cmd
     # Default to npm
-    cmd = ["npm", "install", package]
+    cmd = [resolve_node_command("npm"), "install", package]
     if dev:
         cmd.append("--save-dev")
     return cmd
@@ -257,7 +258,7 @@ def init_js_project(language: ProjectLanguage, *, skip_confirm: bool = False, sk
 
     install_github_app(git_remote)
 
-    install_github_actions(override_formatter_check=True)
+    install_github_actions(override_formatter_check=True, skip_confirm=skip_confirm)
 
     # Show completion message
     usage_table = Table(show_header=False, show_lines=False, border_style="dim")

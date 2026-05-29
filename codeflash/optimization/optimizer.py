@@ -6,7 +6,7 @@ import tempfile
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from codeflash.api.aiservice import AiServiceClient, LocalAiServiceClient
 from codeflash.api.cfapi import send_completion_email
@@ -53,6 +53,30 @@ def _extract_java_package_from_path(file_path: Path) -> str | None:
                 return ".".join(package_parts)
             return None
     return None
+
+
+def _install_optimizer_signal_handlers(
+    signal_module: object, signal_handler: Callable[[int, object], None]
+) -> dict[object, object]:
+    original_handlers: dict[object, object] = {}
+    for signal_name in ("SIGTERM", "SIGHUP", "SIGQUIT", "SIGPIPE"):
+        signum = getattr(signal_module, signal_name, None)
+        if signum is None:
+            continue
+        try:
+            original_handlers[signum] = signal_module.getsignal(signum)
+            signal_module.signal(signum, signal_handler)
+        except (AttributeError, OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Skipping unsupported signal %s: %s", signal_name, exc)
+    return original_handlers
+
+
+def _restore_optimizer_signal_handlers(signal_module: object, original_handlers: dict[object, object]) -> None:
+    for signum, original_handler in original_handlers.items():
+        try:
+            signal_module.signal(signum, original_handler)
+        except (AttributeError, OSError, RuntimeError, ValueError) as exc:
+            logger.debug("Failed to restore signal handler for %s: %s", signum, exc)
 
 
 class Optimizer:
@@ -873,10 +897,6 @@ def run_with_args(args: Namespace) -> None:
     cleanup_stale_worktrees()
 
     optimizer = None
-    original_sigterm = signal.getsignal(signal.SIGTERM)
-    original_sighup = signal.getsignal(signal.SIGHUP)
-    original_sigquit = signal.getsignal(signal.SIGQUIT)
-    original_sigpipe = signal.getsignal(signal.SIGPIPE)
 
     def cleanup_worktree_on_exit() -> None:
         if optimizer and optimizer.current_worktree:
@@ -889,10 +909,7 @@ def run_with_args(args: Namespace) -> None:
         raise SystemExit(128 + signum)
 
     atexit.register(cleanup_worktree_on_exit)
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGHUP, signal_handler)
-    signal.signal(signal.SIGQUIT, signal_handler)
-    signal.signal(signal.SIGPIPE, signal_handler)
+    original_signal_handlers = _install_optimizer_signal_handlers(signal, signal_handler)
 
     try:
         optimizer = Optimizer(args)
@@ -905,7 +922,4 @@ def run_with_args(args: Namespace) -> None:
         raise SystemExit from None
     finally:
         atexit.unregister(cleanup_worktree_on_exit)
-        signal.signal(signal.SIGTERM, original_sigterm)
-        signal.signal(signal.SIGHUP, original_sighup)
-        signal.signal(signal.SIGQUIT, original_sigquit)
-        signal.signal(signal.SIGPIPE, original_sigpipe)
+        _restore_optimizer_signal_handlers(signal, original_signal_handlers)

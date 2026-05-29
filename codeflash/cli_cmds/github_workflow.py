@@ -34,7 +34,7 @@ class DependencyManager(Enum):
     UNKNOWN = auto()
 
 
-def install_github_actions(override_formatter_check: bool = False) -> None:
+def install_github_actions(override_formatter_check: bool = False, *, skip_confirm: bool = False) -> None:
     try:
         config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
 
@@ -100,12 +100,15 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
             console.print(benchmark_panel)
             console.print()
 
-            benchmark_questions = [
-                inquirer.Confirm("benchmark_mode", message="Run GitHub Actions in benchmark mode?", default=True)
-            ]
+            if skip_confirm:
+                benchmark_mode = True
+            else:
+                benchmark_questions = [
+                    inquirer.Confirm("benchmark_mode", message="Run GitHub Actions in benchmark mode?", default=True)
+                ]
 
-            benchmark_answers = inquirer.prompt(benchmark_questions, theme=CodeflashTheme())
-            benchmark_mode = benchmark_answers["benchmark_mode"] if benchmark_answers else False
+                benchmark_answers = inquirer.prompt(benchmark_questions, theme=CodeflashTheme())
+                benchmark_mode = benchmark_answers["benchmark_mode"] if benchmark_answers else False
 
         # Show prompt only if workflow doesn't exist locally
         actions_panel = Panel(
@@ -121,26 +124,28 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
         console.print(actions_panel)
         console.print()
 
-        creation_questions = [
-            inquirer.Confirm(
-                "confirm_creation",
-                message="Set up GitHub Actions for continuous optimization? We'll open a pull request with the workflow file.",
-                default=True,
-            )
-        ]
+        if skip_confirm:
+            confirm_creation = True
+        else:
+            creation_questions = [
+                inquirer.Confirm(
+                    "confirm_creation",
+                    message="Set up GitHub Actions for continuous optimization? We'll open a pull request with the workflow file.",
+                    default=True,
+                )
+            ]
 
-        creation_answers = inquirer.prompt(creation_questions, theme=CodeflashTheme())
-        if not creation_answers or not creation_answers["confirm_creation"]:
+            creation_answers = inquirer.prompt(creation_questions, theme=CodeflashTheme())
+            confirm_creation = bool(creation_answers and creation_answers["confirm_creation"])
+
+        if not confirm_creation:
             skip_panel = Panel(
                 Text("⏩️ Skipping GitHub Actions setup.", style="yellow"), title="⏩️ Skipped", border_style="yellow"
             )
             console.print(skip_panel)
             ph("cli-github-workflow-skipped")
             return
-        ph(
-            "cli-github-optimization-confirm-workflow-creation",
-            {"confirm_creation": creation_answers["confirm_creation"]},
-        )
+        ph("cli-github-optimization-confirm-workflow-creation", {"confirm_creation": confirm_creation})
 
         # Generate workflow content AFTER user confirmation
         logger.info("[github_workflow.py:install_github_actions] User confirmed, generating workflow content...")
@@ -423,6 +428,11 @@ def install_github_actions(override_formatter_check: bool = False) -> None:
                 f"🚀 Codeflash is now configured to automatically optimize new Github PRs!{LF}"
             )
 
+        if skip_confirm:
+            click.echo("Add your CODEFLASH_API_KEY as a GitHub secret before running this workflow.")
+            ph("cli-github-workflow-created")
+            return
+
         # Show GitHub secrets setup panel (needed in both cases - PR created via API or local file)
         try:
             existing_api_key = get_codeflash_api_key()
@@ -555,8 +565,11 @@ def get_github_action_working_directory(toml_path: Path, git_root: Path) -> str:
 def detect_project_language_for_workflow(project_root: Path) -> str:
     """Detect the primary language of the project for workflow generation.
 
-    Returns: 'python', 'javascript', 'typescript', or 'java'
+    Returns: 'python', 'javascript', 'typescript', 'java', or 'go'
     """
+    if (project_root / "go.mod").exists():
+        return "go"
+
     # Check for Java build tools first (pom.xml or build.gradle)
     if (
         (project_root / "pom.xml").exists()
@@ -693,9 +706,9 @@ def generate_dynamic_workflow_content(
     # Detect project language
     project_language = detect_project_language_for_workflow(Path.cwd())
 
-    # For JavaScript/TypeScript and Java projects, use static template customization
+    # For JavaScript/TypeScript, Java, and Go projects, use static template customization
     # (AI-generated steps are currently Python-only)
-    if project_language in ("javascript", "typescript", "java"):
+    if project_language in ("javascript", "typescript", "java", "go"):
         return customize_codeflash_yaml_content(optimize_yml_content, config, git_root, benchmark_mode)
 
     # Python project - try AI-generated steps
@@ -824,6 +837,9 @@ def customize_codeflash_yaml_content(
     if project_language in ("javascript", "typescript"):
         return _customize_js_workflow_content(optimize_yml_content, git_root, benchmark_mode)
 
+    if project_language == "go":
+        return _customize_go_workflow_content(optimize_yml_content, git_root, benchmark_mode)
+
     # Python project (default)
     return _customize_python_workflow_content(optimize_yml_content, git_root, benchmark_mode)
 
@@ -948,3 +964,38 @@ def _customize_java_workflow_content(optimize_yml_content: str, git_root: Path) 
     # Install dependencies command
     install_deps = get_java_dependency_installation_commands(build_tool)
     return optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps)
+
+
+def _customize_go_workflow_content(optimize_yml_content: str, git_root: Path, benchmark_mode: bool = False) -> str:
+    """Customize workflow content for Go projects."""
+    from codeflash.cli_cmds.init_go import get_go_dependency_installation_commands, get_go_runtime_setup_steps
+
+    project_root = Path.cwd()
+
+    if project_root == git_root:
+        working_dir = ""
+    else:
+        rel_path = str(project_root.relative_to(git_root))
+        working_dir = f"""defaults:
+      run:
+        working-directory: ./{rel_path}"""
+
+    optimize_yml_content = optimize_yml_content.replace("Optimize new Python code", "Optimize new Go code")
+    optimize_yml_content = optimize_yml_content.replace("{{ working_directory }}", working_dir)
+
+    python_setup = get_dependency_manager_installation_string(DependencyManager.PIP)
+    go_setup = get_go_runtime_setup_steps()
+    setup_runtime = f"""{python_setup}
+      {go_setup}"""
+    optimize_yml_content = optimize_yml_content.replace("{{ setup_runtime_environment }}", setup_runtime)
+
+    install_deps = f"""|
+          python -m pip install --upgrade pip
+          pip install codeflash
+          {get_go_dependency_installation_commands()}"""
+    optimize_yml_content = optimize_yml_content.replace("{{ install_dependencies_command }}", install_deps)
+
+    codeflash_cmd = "codeflash"
+    if benchmark_mode:
+        codeflash_cmd += " --benchmark"
+    return optimize_yml_content.replace("{{ codeflash_command }}", codeflash_cmd)

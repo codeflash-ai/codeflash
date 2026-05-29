@@ -386,7 +386,25 @@ class TestGetConfigStrategy:
 
 class TestParseJavaProjectConfig:
     def test_standard_maven_project(self, tmp_path: Path) -> None:
-        (tmp_path / "pom.xml").write_text("<project/>", encoding="utf-8")
+        (tmp_path / "pom.xml").write_text(
+            """<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>demo</artifactId>
+  <version>1.0.0</version>
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.10.0</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
+""",
+            encoding="utf-8",
+        )
         src = tmp_path / "src" / "main" / "java"
         src.mkdir(parents=True)
         test = tmp_path / "src" / "test" / "java"
@@ -397,9 +415,26 @@ class TestParseJavaProjectConfig:
         assert config["language"] == "java"
         assert config["module_root"] == str(src)
         assert config["tests_root"] == str(test)
+        assert config["pytest_cmd"] == "mvn test"
+        assert config["test_framework"] == "junit5"
 
     def test_standard_gradle_project(self, tmp_path: Path) -> None:
-        (tmp_path / "build.gradle").write_text("", encoding="utf-8")
+        (tmp_path / "build.gradle").write_text(
+            """
+plugins {
+    id 'java'
+}
+
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+}
+
+test {
+    useJUnitPlatform()
+}
+""",
+            encoding="utf-8",
+        )
         src = tmp_path / "src" / "main" / "java"
         src.mkdir(parents=True)
         test = tmp_path / "src" / "test" / "java"
@@ -408,6 +443,8 @@ class TestParseJavaProjectConfig:
         config = parse_java_project_config(tmp_path)
         assert config is not None
         assert config["language"] == "java"
+        assert config["pytest_cmd"] == "./gradlew test"
+        assert config["test_framework"] == "junit5"
 
     def test_returns_none_for_non_java(self, tmp_path: Path) -> None:
         assert parse_java_project_config(tmp_path) is None

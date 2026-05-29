@@ -24,6 +24,7 @@ from codeflash.languages.base import (
     TestInfo,
     TestResult,
 )
+from codeflash.languages.javascript.command_utils import resolve_node_command, resolve_node_command_list
 from codeflash.languages.javascript.treesitter import TreeSitterAnalyzer, TreeSitterLanguage, get_analyzer_for_file
 from codeflash.languages.registry import register_language
 from codeflash.models.models import FunctionParent
@@ -1566,7 +1567,7 @@ class JavaScriptSupport:
             stdin_filepath = str(file_path.name) if file_path else f"file{self.default_file_extension}"
 
             result = subprocess.run(
-                ["npx", "prettier", "--stdin-filepath", stdin_filepath],
+                resolve_node_command_list(["npx", "prettier", "--stdin-filepath", stdin_filepath]),
                 check=False,
                 input=source,
                 capture_output=True,
@@ -1606,15 +1607,17 @@ class JavaScriptSupport:
 
         # Build Jest command
         test_pattern = "|".join(str(f) for f in test_files)
-        cmd = [
-            "npx",
-            "jest",
-            "--reporters=default",
-            "--reporters=jest-junit",
-            f"--testPathPattern={test_pattern}",
-            "--runInBand",  # Sequential for deterministic timing
-            "--forceExit",
-        ]
+        cmd = resolve_node_command_list(
+            [
+                "npx",
+                "jest",
+                "--reporters=default",
+                "--reporters=jest-junit",
+                f"--testPathPattern={test_pattern}",
+                "--runInBand",  # Sequential for deterministic timing
+                "--forceExit",
+            ]
+        )
 
         test_env = env.copy()
         test_env["JEST_JUNIT_OUTPUT_FILE"] = str(junit_xml)
@@ -2314,10 +2317,12 @@ class JavaScriptSupport:
 
         """
         errors: list[SetupError] = []
+        node_cmd = resolve_node_command("node")
+        npm_cmd = resolve_node_command("npm")
 
         # Check Node.js
         try:
-            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess.run([node_cmd, "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
                 errors.append(
                     SetupError(
@@ -2336,7 +2341,7 @@ class JavaScriptSupport:
 
         # Check npm
         try:
-            result = subprocess.run(["npm", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess.run([npm_cmd, "--version"], check=False, capture_output=True, text=True, timeout=10)
             if result.returncode != 0:
                 errors.append(
                     SetupError("npm is not available. Please ensure npm is installed with Node.js.", should_abort=True)
@@ -2378,7 +2383,9 @@ class JavaScriptSupport:
     def _detect_node_version(self) -> None:
         """Detect and cache the Node.js runtime version."""
         try:
-            result = subprocess.run(["node", "--version"], check=False, capture_output=True, text=True, timeout=10)
+            result = subprocess.run(
+                [resolve_node_command("node"), "--version"], check=False, capture_output=True, text=True, timeout=10
+            )
             if result.returncode == 0 and result.stdout.strip():
                 self._language_version = result.stdout.strip().lstrip("v")
         except Exception:
@@ -2407,7 +2414,7 @@ class JavaScriptSupport:
 
         try:
             result = subprocess.run(
-                ["npm", "install", "--save-dev", "codeflash"],
+                resolve_node_command_list(["npm", "install", "--save-dev", "codeflash"]),
                 check=False,
                 cwd=project_root,
                 capture_output=True,

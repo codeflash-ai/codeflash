@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from argparse import Namespace
 
 
-def init_codeflash() -> None:
+def init_codeflash(*, skip_confirm: bool = False, skip_api_key: bool = False) -> None:
     try:
         welcome_panel = Panel(
             Text(
@@ -63,34 +63,46 @@ def init_codeflash() -> None:
         project_language = detect_project_language()
 
         if project_language == ProjectLanguage.GO:
-            init_go_project()
+            init_go_project(skip_confirm=skip_confirm, skip_api_key=skip_api_key)
             return
 
         if project_language == ProjectLanguage.JAVA:
-            init_java_project()
+            init_java_project(skip_confirm=skip_confirm, skip_api_key=skip_api_key)
             return
 
         if project_language in (ProjectLanguage.JAVASCRIPT, ProjectLanguage.TYPESCRIPT):
-            init_js_project(project_language)
+            init_js_project(project_language, skip_confirm=skip_confirm, skip_api_key=skip_api_key)
             return
 
         # Python project flow
-        did_add_new_key = prompt_api_key()
+        did_add_new_key = False if skip_api_key else prompt_api_key()
+        git_remote = "origin"
 
-        should_modify, config = should_modify_pyproject_toml()
-
+        should_modify, config = should_modify_pyproject_toml(skip_confirm=skip_confirm)
         git_remote = config.get("git_remote", "origin") if config else "origin"
 
         if should_modify:
-            setup_info: CLISetupInfo = collect_setup_info()
-            git_remote = setup_info.git_remote
-            configured = configure_pyproject_toml(setup_info)
-            if not configured:
-                apologize_and_exit()
+            if skip_confirm:
+                from codeflash.setup import detect_project, write_config
+
+                detected = detect_project()
+                configured, message = write_config(detected)
+                if configured:
+                    click.echo(message)
+                    click.echo()
+                else:
+                    click.echo(message)
+                    apologize_and_exit()
+            else:
+                setup_info = collect_setup_info()
+                git_remote = setup_info.git_remote
+                configured = configure_pyproject_toml(setup_info)
+                if not configured:
+                    apologize_and_exit()
 
         install_github_app(git_remote)
 
-        install_github_actions(override_formatter_check=True)
+        install_github_actions(override_formatter_check=True, skip_confirm=skip_confirm)
 
         install_vscode_extension()
 

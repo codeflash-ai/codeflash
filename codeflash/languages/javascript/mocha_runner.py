@@ -19,6 +19,7 @@ from codeflash.cli_cmds.console import logger
 from codeflash.cli_cmds.init_javascript import get_package_install_command
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
+from codeflash.languages.javascript.command_utils import resolve_node_command_list
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
@@ -263,7 +264,7 @@ def _build_mocha_behavioral_command(
         Command list for subprocess execution.
 
     """
-    cmd = ["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"]
+    cmd = resolve_node_command_list(["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"])
 
     if timeout:
         cmd.extend(["--timeout", str(timeout * 1000)])
@@ -289,7 +290,7 @@ def _build_mocha_benchmarking_command(
         Command list for subprocess execution.
 
     """
-    cmd = ["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"]
+    cmd = resolve_node_command_list(["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"])
 
     if timeout:
         cmd.extend(["--timeout", str(timeout * 1000)])
@@ -315,7 +316,7 @@ def _build_mocha_line_profile_command(
         Command list for subprocess execution.
 
     """
-    cmd = ["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"]
+    cmd = resolve_node_command_list(["npx", "mocha", "--reporter", "json", "--jobs", "1", "--exit"])
 
     if timeout:
         cmd.extend(["--timeout", str(timeout * 1000)])

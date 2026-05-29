@@ -14,6 +14,7 @@ from pydantic.dataclasses import dataclass
 
 from codeflash.cli_cmds.console import apologize_and_exit, console
 from codeflash.code_utils.compat import LF
+from codeflash.code_utils.pyproject_utils import ensure_minimal_project_metadata
 from codeflash.code_utils.config_parser import parse_config_file
 from codeflash.code_utils.env_utils import check_formatter_installed
 from codeflash.lsp.helpers import is_LSP_enabled
@@ -142,7 +143,7 @@ def is_valid_pyproject_toml(pyproject_toml_path: Union[str, Path]) -> tuple[bool
     return True, config, ""
 
 
-def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
+def should_modify_pyproject_toml(*, skip_confirm: bool = False) -> tuple[bool, dict[str, Any] | None]:
     """Check if the current directory contains a valid pyproject.toml file with codeflash config.
 
     If it does, ask the user if they want to re-configure it.
@@ -159,6 +160,9 @@ def should_modify_pyproject_toml() -> tuple[bool, dict[str, Any] | None]:
     if not valid:
         # needs to be re-configured
         return True, None
+
+    if skip_confirm:
+        return False, config
 
     return Confirm.ask(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
@@ -199,6 +203,7 @@ def configure_pyproject_toml(
             f"Please create a new empty pyproject.toml file here, OR if you use poetry then run `poetry init`, OR run `codeflash init` again from a directory with an existing pyproject.toml file."
         )
         return False
+    ensure_minimal_project_metadata(pyproject_data, toml_path.parent)
 
     codeflash_section = tomlkit.table()
     codeflash_section.add(tomlkit.comment("All paths are relative to this pyproject.toml's directory."))
@@ -249,6 +254,7 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
     lsp_mode = is_LSP_enabled()
     # Define a minimal pyproject.toml content
     new_pyproject_toml = tomlkit.document()
+    ensure_minimal_project_metadata(new_pyproject_toml, pyproject_toml_path.parent)
     new_pyproject_toml["tool"] = {"codeflash": {}}
     try:
         pyproject_toml_path.write_text(tomlkit.dumps(new_pyproject_toml), encoding="utf8")

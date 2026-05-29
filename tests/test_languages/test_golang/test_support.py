@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
+
+import pytest
 
 from codeflash.languages.golang.support import GoSupport
 from codeflash.languages.language_enum import Language
@@ -44,6 +47,17 @@ class TestGoSupportProperties:
         support = GoSupport()
         assert "vendor" in support.dir_excludes
         assert "testdata" in support.dir_excludes
+
+    def test_analyzer_initialization_is_lazy(self, monkeypatch) -> None:
+        analyzer_cls = Mock(side_effect=ModuleNotFoundError("tree_sitter_go missing"))
+        support = GoSupport()
+
+        monkeypatch.setattr("codeflash.languages.golang.support.GoAnalyzer", analyzer_cls)
+
+        with pytest.raises(ModuleNotFoundError, match="tree-sitter Go parser"):
+            support.validate_syntax("package main\n\nfunc main() {}\n")
+
+        analyzer_cls.assert_called_once_with()
 
 
 class TestGoSupportRegistration:

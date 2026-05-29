@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 from codeflash.code_utils.config_parser import parse_config_file
-from codeflash.code_utils.formatter import format_code, format_generated_code, sort_imports
+from codeflash.code_utils.formatter import apply_formatter_cmds, format_code, format_generated_code, sort_imports
 from codeflash.discovery.functions_to_optimize import FunctionToOptimize
-from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.languages.function_optimizer import FunctionOptimizer
+from codeflash.models.models import CodeString, CodeStringsMarkdown
 from codeflash.verification.verification_utils import TestConfig
 
 
@@ -1392,6 +1392,30 @@ def test_format_generated_code_unicode():
 
     result = format_generated_code(test_code, ["disabled"])
     assert "Hello, 世界! 🌍" in result
+
+
+def test_apply_formatter_cmds_resolves_node_wrappers_for_javascript(tmp_path: Path):
+    """JavaScript formatter commands should resolve npx/npm wrappers before subprocess execution."""
+    from unittest.mock import MagicMock, patch
+
+    js_file = tmp_path / "test.js"
+    js_file.write_text("const value = 1;\n", encoding="utf-8")
+    resolved_cmd = [r"C:\nvm4w\nodejs\npx.cmd", "prettier", "--write", js_file.as_posix()]
+
+    with (
+        patch(
+            "codeflash.languages.javascript.command_utils.resolve_node_command_list", return_value=resolved_cmd
+        ) as mock_resolve,
+        patch("codeflash.code_utils.formatter.subprocess.run", return_value=MagicMock(returncode=0)) as mock_run,
+    ):
+        _, formatted_code, changed = apply_formatter_cmds(
+            ["npx prettier --write $file"], js_file, test_dir_str=None, print_status=False
+        )
+
+    mock_resolve.assert_called_once_with(["npx", "prettier", "--write", js_file.as_posix()])
+    mock_run.assert_called_once_with(resolved_cmd, capture_output=True, check=False)
+    assert changed is True
+    assert formatted_code == js_file.read_text(encoding="utf-8")
 
 
 def test_format_generated_code_uses_correct_extension_for_javascript():

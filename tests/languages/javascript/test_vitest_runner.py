@@ -16,6 +16,10 @@ from codeflash.languages.javascript.vitest_runner import (
 )
 
 
+def command_name(command: str) -> str:
+    return Path(command).stem.lower()
+
+
 class TestFindVitestProjectRoot:
     """Tests for _find_vitest_project_root function."""
 
@@ -96,9 +100,8 @@ class TestBuildVitestBehavioralCommand:
 
             cmd = _build_vitest_behavioral_command([test_file], timeout=60)
 
-            assert cmd[0] == "npx"
-            assert cmd[1] == "vitest"
-            assert cmd[2] == "run"
+            assert command_name(cmd[0]) == "npx"
+            assert cmd[1:3] == ["vitest", "run"]
 
     def test_includes_reporter_flags(self) -> None:
         """Should include reporter flags for JUnit output."""
@@ -174,9 +177,8 @@ class TestBuildVitestBenchmarkingCommand:
 
             cmd = _build_vitest_benchmarking_command([test_file], timeout=60)
 
-            assert cmd[0] == "npx"
-            assert cmd[1] == "vitest"
-            assert cmd[2] == "run"
+            assert command_name(cmd[0]) == "npx"
+            assert cmd[1:3] == ["vitest", "run"]
 
     def test_includes_serial_execution(self) -> None:
         """Should include serial execution for consistent benchmarking."""
@@ -202,7 +204,8 @@ class TestVitestVsJestCommandDifferences:
 
             vitest_cmd = _build_vitest_behavioral_command([test_file], timeout=60)
 
-            assert vitest_cmd[0:3] == ["npx", "vitest", "run"]
+            assert command_name(vitest_cmd[0]) == "npx"
+            assert vitest_cmd[1:3] == ["vitest", "run"]
 
     def test_vitest_uses_hyphenated_timeout(self) -> None:
         """Vitest uses --test-timeout, Jest uses --testTimeout (camelCase)."""

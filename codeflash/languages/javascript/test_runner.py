@@ -18,6 +18,7 @@ from codeflash.cli_cmds.init_javascript import get_package_install_command
 from codeflash.code_utils.code_utils import get_run_tmp_file
 from codeflash.code_utils.config_consts import STABILITY_CENTER_TOLERANCE, STABILITY_SPREAD_TOLERANCE
 from codeflash.code_utils.shell_utils import get_cross_platform_subprocess_run_args
+from codeflash.languages.javascript.command_utils import resolve_node_command_list
 
 if TYPE_CHECKING:
     from codeflash.models.models import TestFiles
@@ -794,14 +795,16 @@ def run_jest_behavioral_tests(
     coverage_json_path = coverage_dir / "coverage-final.json" if enable_coverage else None
 
     # Build Jest command
-    jest_cmd = [
-        "npx",
-        "jest",
-        "--reporters=default",
-        f"--reporters={CODEFLASH_JEST_REPORTER}",
-        "--runInBand",  # Run tests serially for consistent timing
-        "--forceExit",
-    ]
+    jest_cmd = resolve_node_command_list(
+        [
+            "npx",
+            "jest",
+            "--reporters=default",
+            f"--reporters={CODEFLASH_JEST_REPORTER}",
+            "--runInBand",  # Run tests serially for consistent timing
+            "--forceExit",
+        ]
+    )
 
     # Add Jest config if found - needed for TypeScript transformation
     # Uses codeflash-compatible config if project has bundler moduleResolution
@@ -1048,15 +1051,17 @@ def run_jest_benchmarking_tests(
         logger.debug(f"Jest {jest_major_version} detected - using loop-runner for batched looping")
 
     # Build Jest command for performance tests
-    jest_cmd = [
-        "npx",
-        "jest",
-        "--reporters=default",
-        f"--reporters={CODEFLASH_JEST_REPORTER}",
-        "--runInBand",  # Ensure serial execution
-        "--forceExit",
-        "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
-    ]
+    jest_cmd = resolve_node_command_list(
+        [
+            "npx",
+            "jest",
+            "--reporters=default",
+            f"--reporters={CODEFLASH_JEST_REPORTER}",
+            "--runInBand",  # Ensure serial execution
+            "--forceExit",
+            "--runner=codeflash/loop-runner",  # Use custom loop runner for in-process looping
+        ]
+    )
 
     # Add Jest config if found - needed for TypeScript transformation
     # Uses codeflash-compatible config if project has bundler moduleResolution
@@ -1224,14 +1229,16 @@ def run_jest_line_profile_tests(
     _ensure_runtime_files(effective_cwd)
 
     # Build Jest command for line profiling - simple run without benchmarking loops
-    jest_cmd = [
-        "npx",
-        "jest",
-        "--reporters=default",
-        f"--reporters={CODEFLASH_JEST_REPORTER}",
-        "--runInBand",  # Run tests serially for consistent line profiling
-        "--forceExit",
-    ]
+    jest_cmd = resolve_node_command_list(
+        [
+            "npx",
+            "jest",
+            "--reporters=default",
+            f"--reporters={CODEFLASH_JEST_REPORTER}",
+            "--runInBand",  # Run tests serially for consistent line profiling
+            "--forceExit",
+        ]
+    )
 
     # Add Jest config if found - needed for TypeScript transformation
     # Uses codeflash-compatible config if project has bundler moduleResolution

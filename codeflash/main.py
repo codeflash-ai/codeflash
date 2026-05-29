@@ -31,7 +31,8 @@ def main() -> None:
 
     from codeflash.cli_cmds.cli import parse_args
 
-    if "--help" in sys.argv[1:] or "-h" in sys.argv[1:]:
+    help_requested = "--help" in sys.argv[1:] or "-h" in sys.argv[1:]
+    if help_requested:
         print_codeflash_banner()
     args = parse_args()
 
@@ -51,7 +52,8 @@ def main() -> None:
 
     # Compare command only needs its own imports
     if args.command == "compare":
-        print_codeflash_banner()
+        if not help_requested:
+            print_codeflash_banner()
         from codeflash.cli_cmds.cmd_compare import run_compare
 
         run_compare(args)
@@ -68,7 +70,8 @@ def main() -> None:
     from codeflash.telemetry import posthog_cf
     from codeflash.telemetry.sentry import init_sentry
 
-    print_codeflash_banner()
+    if not help_requested:
+        print_codeflash_banner()
     check_for_newer_minor_version()
 
     if args.command:
@@ -82,11 +85,13 @@ def main() -> None:
         if args.command == "init":
             from codeflash.cli_cmds.cmd_init import init_codeflash
 
-            init_codeflash()
+            init_codeflash(
+                skip_confirm=getattr(args, "yes", False), skip_api_key=bool(os.environ.get("CODEFLASH_API_KEY"))
+            )
         elif args.command == "init-actions":
             from codeflash.cli_cmds.github_workflow import install_github_actions
 
-            install_github_actions()
+            install_github_actions(skip_confirm=getattr(args, "yes", False))
         elif args.command == "vscode-install":
             from codeflash.cli_cmds.extension import install_vscode_extension
 
