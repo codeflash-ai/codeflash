@@ -80,6 +80,18 @@ ignore_subdirs = {
 }
 
 
+def confirm_with_default_on_eof(
+    prompt: str, *, default: bool, show_default: bool = True, **kwargs: Any
+) -> bool:
+    """Return the prompt default instead of crashing when stdin is unavailable."""
+    from rich.prompt import Confirm
+
+    try:
+        return Confirm.ask(prompt, default=default, show_default=show_default, **kwargs)
+    except EOFError:
+        return default
+
+
 @lru_cache(maxsize=1)
 def get_valid_subdirs(current_dir: Optional[Path] = None) -> list[str]:
 
@@ -148,8 +160,6 @@ def should_modify_pyproject_toml(*, skip_confirm: bool = False) -> tuple[bool, d
 
     If it does, ask the user if they want to re-configure it.
     """
-    from rich.prompt import Confirm
-
     pyproject_toml_path = Path.cwd() / "pyproject.toml"
 
     found, _ = config_found(pyproject_toml_path)
@@ -164,7 +174,7 @@ def should_modify_pyproject_toml(*, skip_confirm: bool = False) -> tuple[bool, d
     if skip_confirm:
         return False, config
 
-    return Confirm.ask(
+    return confirm_with_default_on_eof(
         "✅ A valid Codeflash config already exists in this project. Do you want to re-configure it?",
         default=False,
         show_default=True,
@@ -285,9 +295,7 @@ def create_empty_pyproject_toml(pyproject_toml_path: Path) -> None:
 
 def ask_for_telemetry() -> bool:
     """Prompt the user to enable or disable telemetry."""
-    from rich.prompt import Confirm
-
-    return Confirm.ask(
+    return confirm_with_default_on_eof(
         "⚡️ Help us improve Codeflash by sharing anonymous usage data (e.g. errors encountered)?",
         default=True,
         show_default=True,

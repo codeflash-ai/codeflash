@@ -66,6 +66,23 @@ def test_should_modify_pyproject_toml_skip_confirm_skips_reconfigure_prompt(
     assert config["git_remote"] == "upstream"
 
 
+def test_should_modify_pyproject_toml_uses_default_on_eof(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.codeflash]\nmodule-root = "src"\ntests-root = "tests"\ngit-remote = "upstream"\n',
+        encoding="utf-8",
+    )
+
+    with patch("rich.prompt.Confirm.ask", side_effect=EOFError):
+        should_modify, config = should_modify_pyproject_toml()
+
+    assert should_modify is False
+    assert config is not None
+    assert config["git_remote"] == "upstream"
+
+
 def test_init_codeflash_skip_confirm_reuses_existing_python_config(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
