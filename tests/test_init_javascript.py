@@ -3,13 +3,14 @@
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
 from codeflash.cli_cmds.init_javascript import (
     JsPackageManager,
     ProjectLanguage,
+    collect_js_setup_info,
     detect_project_language,
     determine_js_package_manager,
     get_package_install_command,
@@ -334,6 +335,20 @@ class TestShouldModifySkipConfirm:
         assert should_modify is True
         assert config is None
 
+    def test_should_modify_valid_config_uses_default_on_eof(
+        self, tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """EOF on the reconfigure prompt should keep the existing config."""
+        monkeypatch.chdir(tmp_project)
+        codeflash_config = {"moduleRoot": "."}
+        (tmp_project / "package.json").write_text(json.dumps({"name": "test", "codeflash": codeflash_config}))
+
+        with patch("rich.prompt.Confirm.ask", side_effect=EOFError):
+            should_modify, config = should_modify_package_json_config()
+
+        assert should_modify is False
+        assert config == codeflash_config
+
 
 class TestCollectJsSetupInfoSkipConfirm:
     """Tests for collect_js_setup_info with skip_confirm."""
@@ -353,6 +368,30 @@ class TestCollectJsSetupInfoSkipConfirm:
         assert setup_info.module_root_override is None
         assert setup_info.formatter_override is None
         assert setup_info.git_remote == "origin"
+
+    def test_collect_js_setup_info_uses_defaults_on_eof(
+        self, tmp_project: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """EOF on the settings confirm should keep auto-detected defaults."""
+        monkeypatch.chdir(tmp_project)
+        (tmp_project / "package.json").write_text(json.dumps({"name": "test"}))
+
+        get_git_remote = Mock(return_value="origin")
+        monkeypatch.setattr("codeflash.cli_cmds.init_javascript._get_git_remote_for_setup", get_git_remote)
+        monkeypatch.setattr("codeflash.cli_cmds.init_config.ask_for_telemetry", Mock(return_value=True))
+
+        with (
+            patch("rich.prompt.Confirm.ask", side_effect=EOFError),
+            patch("codeflash.cli_cmds.init_javascript.inquirer") as mock_inquirer,
+        ):
+            setup_info = collect_js_setup_info(ProjectLanguage.JAVASCRIPT)
+
+        mock_inquirer.prompt.assert_not_called()
+        get_git_remote.assert_called_once_with()
+        assert setup_info.module_root_override is None
+        assert setup_info.formatter_override is None
+        assert setup_info.git_remote == "origin"
+        assert setup_info.disable_telemetry is False
 
 
 class TestDetectProjectLanguage:

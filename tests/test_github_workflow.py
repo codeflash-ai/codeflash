@@ -53,3 +53,27 @@ def test_install_github_actions_skip_confirm_supports_go_projects(tmp_path: Path
     assert "Optimize new Go code" in workflow_text
     assert "actions/setup-go@v5" in workflow_text
     assert "go mod download" in workflow_text
+
+
+def test_install_github_actions_non_tty_skips_optional_setup(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    Repo.init(tmp_path)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pyproject.toml").write_text(
+        """
+[tool.codeflash]
+module-root = "."
+tests-root = "tests"
+formatter-cmds = ["disabled"]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    stdin = type("Stdin", (), {"isatty": lambda self: False})()
+    monkeypatch.setattr("codeflash.cli_cmds.github_workflow.sys.stdin", stdin)
+
+    with patch("codeflash.cli_cmds.github_workflow.inquirer.prompt") as mock_prompt:
+        install_github_actions()
+
+    mock_prompt.assert_not_called()
+    assert not (tmp_path / ".github" / "workflows" / "codeflash.yaml").exists()

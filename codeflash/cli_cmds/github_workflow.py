@@ -37,6 +37,7 @@ class DependencyManager(Enum):
 def install_github_actions(override_formatter_check: bool = False, *, skip_confirm: bool = False) -> None:
     try:
         config, _config_file_path = parse_config_file(override_formatter_check=override_formatter_check)
+        interactive_stdin = sys.stdin.isatty()
 
         ph("cli-github-actions-install-started")
         try:
@@ -102,6 +103,8 @@ def install_github_actions(override_formatter_check: bool = False, *, skip_confi
 
             if skip_confirm:
                 benchmark_mode = True
+            elif not interactive_stdin:
+                benchmark_mode = False
             else:
                 benchmark_questions = [
                     inquirer.Confirm("benchmark_mode", message="Run GitHub Actions in benchmark mode?", default=True)
@@ -126,6 +129,8 @@ def install_github_actions(override_formatter_check: bool = False, *, skip_confi
 
         if skip_confirm:
             confirm_creation = True
+        elif not interactive_stdin:
+            confirm_creation = False
         else:
             creation_questions = [
                 inquirer.Confirm(

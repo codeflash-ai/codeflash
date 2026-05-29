@@ -19,7 +19,6 @@ import inquirer
 from git import InvalidGitRepositoryError, Repo
 from rich.console import Group
 from rich.panel import Panel
-from rich.prompt import Confirm
 from rich.table import Table
 from rich.text import Text
 
@@ -297,6 +296,8 @@ def init_js_project(language: ProjectLanguage, *, skip_confirm: bool = False, sk
 
 def should_modify_package_json_config(*, skip_confirm: bool = False) -> tuple[bool, dict[str, Any] | None]:
     """Check if package.json has valid codeflash config for JS/TS projects."""
+    from codeflash.cli_cmds.init_config import confirm_with_default_on_eof
+
     package_json_path = Path("package.json")
 
     if not package_json_path.exists():
@@ -326,7 +327,7 @@ def should_modify_package_json_config(*, skip_confirm: bool = False) -> tuple[bo
             return False, config
 
         # Config is valid - ask if user wants to reconfigure
-        return Confirm.ask(
+        return confirm_with_default_on_eof(
             "✅ A valid Codeflash config already exists in package.json. Do you want to re-configure it?",
             default=False,
             show_default=True,
@@ -341,7 +342,7 @@ def collect_js_setup_info(language: ProjectLanguage, *, skip_confirm: bool = Fal
     Uses auto-detection for most settings and only asks for overrides if needed.
     When skip_confirm is True, uses all auto-detected defaults without prompting.
     """
-    from codeflash.cli_cmds.init_config import ask_for_telemetry, get_valid_subdirs
+    from codeflash.cli_cmds.init_config import ask_for_telemetry, confirm_with_default_on_eof, get_valid_subdirs
     from codeflash.code_utils.config_js import (
         detect_formatter,
         detect_module_root,
@@ -378,8 +379,6 @@ def collect_js_setup_info(language: ProjectLanguage, *, skip_confirm: bool = Fal
             pass
         return JSSetupInfo(git_remote=git_remote)
 
-    from rich.prompt import Confirm
-
     # Build detection summary
     formatter_display = detected_formatter[0] if detected_formatter else "none detected"
     detection_table = Table(show_header=False, box=None, padding=(0, 2))
@@ -401,7 +400,7 @@ def collect_js_setup_info(language: ProjectLanguage, *, skip_confirm: bool = Fal
     module_root_override = None
     formatter_override = None
 
-    if Confirm.ask("Would you like to change any of these settings?", default=False):
+    if confirm_with_default_on_eof("Would you like to change any of these settings?", default=False):
         # Module root override
         valid_subdirs = get_valid_subdirs()
         curdir_option = f"current directory ({curdir})"

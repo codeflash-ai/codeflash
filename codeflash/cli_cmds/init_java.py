@@ -20,6 +20,7 @@ from rich.table import Table
 from rich.text import Text
 
 from codeflash.cli_cmds.console import apologize_and_exit, console
+from codeflash.cli_cmds.init_config import confirm_with_default_on_eof
 from codeflash.code_utils.code_utils import validate_relative_directory_path
 from codeflash.code_utils.compat import LF
 from codeflash.code_utils.git_utils import get_git_remotes
@@ -215,8 +216,6 @@ def init_java_project(*, skip_confirm: bool = False, skip_api_key: bool = False)
 
 def should_modify_java_config(*, skip_confirm: bool = False) -> tuple[bool, dict[str, Any] | None]:
     """Check if the project already has Codeflash config."""
-    from rich.prompt import Confirm
-
     project_root = Path.cwd()
 
     # Check for existing codeflash config in pom.xml properties or gradle.properties
@@ -228,7 +227,7 @@ def should_modify_java_config(*, skip_confirm: bool = False) -> tuple[bool, dict
         if existing:
             if skip_confirm:
                 return False, None
-            return Confirm.ask(
+            return confirm_with_default_on_eof(
                 "A Codeflash config already exists. Do you want to re-configure it?", default=False, show_default=True
             ), None
     except ValueError:
@@ -239,8 +238,6 @@ def should_modify_java_config(*, skip_confirm: bool = False) -> tuple[bool, dict
 
 def collect_java_setup_info(*, skip_confirm: bool = False) -> JavaSetupInfo:
     """Collect setup information for Java projects."""
-    from rich.prompt import Confirm
-
     from codeflash.cli_cmds.init_config import ask_for_telemetry
 
     curdir = Path.cwd()
@@ -282,7 +279,7 @@ def collect_java_setup_info(*, skip_confirm: bool = False) -> JavaSetupInfo:
     test_root_override = None
     formatter_override = None
 
-    if Confirm.ask("Would you like to change any of these settings?", default=False):
+    if confirm_with_default_on_eof("Would you like to change any of these settings?", default=False):
         # Source root override
         module_root_override = _prompt_directory_override("source", detected_source_root, curdir)
 
