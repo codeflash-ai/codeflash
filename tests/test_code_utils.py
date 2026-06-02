@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from codeflash.code_utils.code_utils import (
+    _get_site_packages_paths,
     cleanup_paths,
     exit_with_message,
     file_name_from_test_module_name,
@@ -263,6 +264,7 @@ def test_get_run_tmp_file_reuses_temp_directory() -> None:
 def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages").resolve()]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
+    _get_site_packages_paths.cache_clear()
 
     file_path = Path("/usr/local/lib/python3.9/site-packages/some_package")
     assert path_belongs_to_site_packages(file_path) is True
@@ -271,6 +273,7 @@ def test_path_belongs_to_site_packages_with_site_package_path(monkeypatch: pytes
 def test_path_belongs_to_site_packages_with_non_site_package_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
+    _get_site_packages_paths.cache_clear()
 
     file_path = Path("/usr/local/lib/python3.9/other_directory/some_package")
     assert path_belongs_to_site_packages(file_path) is False
@@ -279,6 +282,7 @@ def test_path_belongs_to_site_packages_with_non_site_package_path(monkeypatch: p
 def test_path_belongs_to_site_packages_with_relative_path(monkeypatch: pytest.MonkeyPatch) -> None:
     site_packages = [Path("/usr/local/lib/python3.9/site-packages")]
     monkeypatch.setattr(site, "getsitepackages", lambda: site_packages)
+    _get_site_packages_paths.cache_clear()
 
     file_path = Path("some_package")
     assert path_belongs_to_site_packages(file_path) is False
@@ -298,6 +302,7 @@ def test_path_belongs_to_site_packages_with_symlinked_site_packages(
     package_file.write_text("# package file")
 
     monkeypatch.setattr(site, "getsitepackages", lambda: [str(symlinked_site_packages)])
+    _get_site_packages_paths.cache_clear()
 
     assert path_belongs_to_site_packages(package_file) is True
 
@@ -321,6 +326,7 @@ def test_path_belongs_to_site_packages_with_complex_symlinks(monkeypatch: pytest
 
     site_packages_via_links = link2 / "lib" / "python3.9" / "site-packages"
     monkeypatch.setattr(site, "getsitepackages", lambda: [str(site_packages_via_links)])
+    _get_site_packages_paths.cache_clear()
 
     assert path_belongs_to_site_packages(package_file) is True
 
@@ -341,6 +347,7 @@ def test_path_belongs_to_site_packages_resolved_paths_normalization(
 
     complex_site_packages_path = tmp_path / "lib" / "python3.9" / "other" / ".." / "site-packages" / "."
     monkeypatch.setattr(site, "getsitepackages", lambda: [str(complex_site_packages_path)])
+    _get_site_packages_paths.cache_clear()
 
     assert path_belongs_to_site_packages(package_file) is True
 
@@ -380,10 +387,8 @@ def my_function():
 
 
 @pytest.fixture
-def mock_code_context():
+def mock_code_context() -> MagicMock:
     """Mock CodeOptimizationContext for testing extract_dependent_function."""
-    from unittest.mock import MagicMock
-
     from codeflash.models.models import CodeOptimizationContext
 
     context = MagicMock(spec=CodeOptimizationContext)
@@ -391,7 +396,7 @@ def mock_code_context():
     return context
 
 
-def test_extract_dependent_function_sync_and_async(mock_code_context):
+def test_extract_dependent_function_sync_and_async(mock_code_context: MagicMock) -> None:
     """Test extract_dependent_function with both sync and async functions."""
     # Test sync function extraction
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
@@ -417,7 +422,7 @@ async def async_helper_function():
     assert extract_dependent_function("main_function", mock_code_context) == "async_helper_function"
 
 
-def test_extract_dependent_function_edge_cases(mock_code_context):
+def test_extract_dependent_function_edge_cases(mock_code_context: MagicMock) -> None:
     """Test extract_dependent_function edge cases."""
     # No dependent functions
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
@@ -441,7 +446,7 @@ async def helper2():
     assert extract_dependent_function("main_function", mock_code_context) is False
 
 
-def test_extract_dependent_function_mixed_scenarios(mock_code_context):
+def test_extract_dependent_function_mixed_scenarios(mock_code_context: MagicMock) -> None:
     """Test extract_dependent_function with mixed sync/async scenarios."""
     # Async main with sync helper
     mock_code_context.testgen_context = CodeStringsMarkdown.parse_markdown_code("""```python:file.py
