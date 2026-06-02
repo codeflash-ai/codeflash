@@ -81,6 +81,7 @@ from codeflash.models.models import (
     AIServiceRefinerRequest,
     BestOptimization,
     CandidateEvaluationContext,
+    ConcurrencyMetrics,
     GeneratedTests,
     GeneratedTestsList,
     OptimizationReviewResult,
@@ -502,6 +503,7 @@ class FunctionOptimizer:
         self.experiment_id = os.getenv("CODEFLASH_EXPERIMENT_ID", None)
         self.local_aiservice_client = LocalAiServiceClient() if self.experiment_id else None
         self.test_files = TestFiles(test_files=[])
+        self.cached_concurrency_metrics: ConcurrencyMetrics | None = None
 
         default_effort = getattr(args, "effort", EffortLevel.MEDIUM.value) if args else EffortLevel.MEDIUM.value
         self.effort = effort_override or default_effort
@@ -788,20 +790,53 @@ class FunctionOptimizer:
         ):
             console.rule()
             new_code_context = code_context
-            # Generate tests and optimizations in parallel
-            future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
-            future_optimizations = self.executor.submit(
-                self.generate_optimizations,
-                read_writable_code=code_context.read_writable_code,
-                read_only_context_code=code_context.read_only_context_code,
-                run_experiment=should_run_experiment,
-                is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
-            )
 
-            concurrent.futures.wait([future_tests, future_optimizations])
+            if self.function_to_optimize.is_async:
+                future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
+                concurrent.futures.wait([future_tests])
+                test_setup_result = future_tests.result()
 
-            test_setup_result = future_tests.result()
-            optimization_result = future_optimizations.result()
+                pre_optimization_concurrency_metrics: dict[str, float] | None = None
+                if is_successful(test_setup_result) and self.test_files.test_files:
+                    test_env = self.get_test_env(
+                        codeflash_loop_index=0, codeflash_test_iteration=0, codeflash_tracer_disable=1
+                    )
+                    metrics = self.run_concurrency_benchmark(
+                        code_context=code_context, original_helper_code=original_helper_code, test_env=test_env
+                    )
+                    if metrics is not None:
+                        self.cached_concurrency_metrics = metrics
+                        pre_optimization_concurrency_metrics = {
+                            "concurrency_ratio": metrics.concurrency_ratio,
+                            "sequential_time_ns": float(metrics.sequential_time_ns),
+                            "concurrent_time_ns": float(metrics.concurrent_time_ns),
+                        }
+
+                future_optimizations = self.executor.submit(
+                    self.generate_optimizations,
+                    read_writable_code=code_context.read_writable_code,
+                    read_only_context_code=code_context.read_only_context_code,
+                    run_experiment=should_run_experiment,
+                    is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
+                    concurrency_metrics=pre_optimization_concurrency_metrics,
+                )
+                concurrent.futures.wait([future_optimizations])
+                optimization_result = future_optimizations.result()
+            else:
+                future_tests = self.executor.submit(self.generate_and_instrument_tests, new_code_context)
+                future_optimizations = self.executor.submit(
+                    self.generate_optimizations,
+                    read_writable_code=code_context.read_writable_code,
+                    read_only_context_code=code_context.read_only_context_code,
+                    run_experiment=should_run_experiment,
+                    is_numerical_code=self.is_numerical_code and not self.args.no_jit_opts,
+                )
+
+                concurrent.futures.wait([future_tests, future_optimizations])
+
+                test_setup_result = future_tests.result()
+                optimization_result = future_optimizations.result()
+
             console.rule()
 
         if not is_successful(test_setup_result):
@@ -1861,6 +1896,7 @@ class FunctionOptimizer:
         read_only_context_code: str,
         run_experiment: bool = False,
         is_numerical_code: bool | None = None,
+        concurrency_metrics: dict[str, float] | None = None,
     ) -> Result[tuple[OptimizationSet, str], str]:
         """Generate optimization candidates for the function. Backend handles multi-model diversity."""
         n_candidates = get_effort_value(EffortKeys.N_OPTIMIZER_CANDIDATES, self.effort)
@@ -1876,6 +1912,7 @@ class FunctionOptimizer:
             n_candidates=n_candidates,
             is_numerical_code=is_numerical_code,
             rerun_trace_id=self.rerun_trace_id,
+            concurrency_metrics=concurrency_metrics,
         )
 
         future_references = self.executor.submit(
@@ -1902,6 +1939,7 @@ class FunctionOptimizer:
                 language_version=self.language_support.language_version,
                 is_async=self.function_to_optimize.is_async,
                 n_candidates=n_candidates,
+                concurrency_metrics=concurrency_metrics,
             )
             futures.append(future_candidates_exp)
 
@@ -3290,6 +3328,11 @@ class FunctionOptimizer:
         """
         if not self.function_to_optimize.is_async:
             return None
+
+        if self.cached_concurrency_metrics is not None:
+            cached = self.cached_concurrency_metrics
+            self.cached_concurrency_metrics = None
+            return cached
 
         from codeflash.code_utils.instrument_existing_tests import add_async_decorator_to_function
 

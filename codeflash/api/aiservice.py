@@ -157,6 +157,7 @@ class AiServiceClient:
         n_candidates: int = 5,
         is_numerical_code: bool | None = None,
         rerun_trace_id: str | None = None,
+        concurrency_metrics: dict[str, float] | None = None,
     ) -> list[OptimizedCandidate]:
         """Optimize the given code for performance by making a request to the Django endpoint.
 
@@ -199,6 +200,9 @@ class AiServiceClient:
             "is_numerical_code": is_numerical_code,
             "rerun_trace_id": rerun_trace_id,
         }
+
+        if concurrency_metrics is not None:
+            payload["concurrency_metrics"] = concurrency_metrics
 
         self.add_language_metadata(payload, language_version, module_system)
 
