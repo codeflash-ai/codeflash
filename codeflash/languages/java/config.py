@@ -163,9 +163,9 @@ def _detect_test_framework(project_root: Path, build_tool: BuildTool) -> tuple[s
         logger.debug("Selected TestNG as test framework")
         return "testng", has_junit5, has_junit4, has_testng
 
-    # Default to JUnit 4 if nothing detected (more common in legacy projects)
-    logger.debug("No test framework detected, defaulting to JUnit 4")
-    return "junit4", has_junit5, has_junit4, has_testng
+    # Default to JUnit 5 if nothing detected (standard since 2017)
+    logger.debug("No test framework detected, defaulting to JUnit 5")
+    return "junit5", has_junit5, has_junit4, has_testng
 
 
 def _detect_test_deps_from_pom(project_root: Path) -> tuple[bool, bool, bool]:
@@ -285,6 +285,23 @@ def _detect_test_deps_from_gradle(project_root: Path) -> tuple[bool, bool, bool]
                     has_testng = True
             except Exception:
                 pass
+
+    # For multi-module projects, check submodule build files if root has no test deps
+    if not (has_junit5 or has_junit4 or has_testng):
+        for sub_gradle in sorted(project_root.glob("*/build.gradle*")):
+            if sub_gradle.name in ("build.gradle", "build.gradle.kts"):
+                try:
+                    content = sub_gradle.read_text(encoding="utf-8")
+                    if "junit-jupiter" in content or "useJUnitPlatform" in content:
+                        has_junit5 = True
+                    if "junit:junit" in content:
+                        has_junit4 = True
+                    if "testng" in content.lower():
+                        has_testng = True
+                    if has_junit5:
+                        break  # JUnit 5 found, no need to check more
+                except Exception:
+                    pass
 
     return has_junit5, has_junit4, has_testng
 

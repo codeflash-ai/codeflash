@@ -7,6 +7,8 @@ import pytest
 from codeflash.languages.java.build_tools import BuildTool
 from codeflash.languages.java.config import (
     JavaProjectConfig,
+    _detect_test_deps_from_gradle,
+    _detect_test_framework,
     detect_java_project,
     get_test_class_pattern,
     get_test_file_pattern,
@@ -342,3 +344,50 @@ class TestDetectWithFixture:
         assert config.source_root is not None
         assert config.test_root is not None
         assert config.has_junit5 is True
+
+
+class TestGradleSubmoduleDetection:
+
+    def test_detect_gradle_junit5_from_submodule(self, tmp_path: Path) -> None:
+        root = tmp_path.resolve()
+        # Root build.gradle with no test deps
+        (root / "build.gradle.kts").write_text("plugins { java }\n", encoding="utf-8")
+        (root / "settings.gradle.kts").write_text('include("submodule-a")\n', encoding="utf-8")
+
+        # Submodule with JUnit 5
+        sub = root / "submodule-a"
+        sub.mkdir()
+        (sub / "build.gradle.kts").write_text(
+            'dependencies { testImplementation("org.junit.jupiter:junit-jupiter:5.10.0") }\n'
+            "tasks.withType<Test> { useJUnitPlatform() }\n",
+            encoding="utf-8",
+        )
+
+        has_junit5, has_junit4, has_testng = _detect_test_deps_from_gradle(root)
+        assert has_junit5 is True
+        assert has_junit4 is False
+        assert has_testng is False
+
+    def test_detect_gradle_junit5_from_root(self, tmp_path: Path) -> None:
+        root = tmp_path.resolve()
+        (root / "build.gradle").write_text(
+            "dependencies { testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0' }\n"
+            "test { useJUnitPlatform() }\n",
+            encoding="utf-8",
+        )
+
+        has_junit5, has_junit4, has_testng = _detect_test_deps_from_gradle(root)
+        assert has_junit5 is True
+        assert has_junit4 is False
+        assert has_testng is False
+
+    def test_default_to_junit5_when_nothing_detected(self, tmp_path: Path) -> None:
+        root = tmp_path.resolve()
+        # Empty Gradle project — no test deps anywhere
+        (root / "build.gradle.kts").write_text("plugins { java }\n", encoding="utf-8")
+
+        framework, has_junit5, has_junit4, has_testng = _detect_test_framework(root, BuildTool.GRADLE)
+        assert framework == "junit5"
+        assert has_junit5 is False
+        assert has_junit4 is False
+        assert has_testng is False
