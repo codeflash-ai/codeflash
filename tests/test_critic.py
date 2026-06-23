@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from codeflash.code_utils.env_utils import get_pr_number
 from codeflash.models.models import (
     CodeOptimizationContext,
@@ -15,7 +17,9 @@ from codeflash.models.models import (
     TestResults,
     TestType,
 )
+from codeflash.languages.current import reset_current_language, set_current_language
 from codeflash.result.critic import (
+    compute_noise_floor,
     concurrency_gain,
     coverage_critic,
     performance_gain,
@@ -799,3 +803,54 @@ def test_parse_concurrency_metrics() -> None:
     metrics_no_class = parse_concurrency_metrics(test_results_no_class, "my_function")
     assert metrics_no_class is not None
     assert metrics_no_class.concurrency_ratio == 2.0  # 5000000 / 2500000
+
+
+def test_compute_noise_floor_python() -> None:
+    """Python noise floor: 5% for >=10μs, 15% for <10μs."""
+    reset_current_language()
+    assert compute_noise_floor(100_000, disable_gh_action_noise=True) == pytest.approx(0.05)
+    assert compute_noise_floor(9_999, disable_gh_action_noise=True) == pytest.approx(0.15)
+
+
+def test_compute_noise_floor_javascript() -> None:
+    """JS noise floor is 3x Python: 15% for >=10μs, 45% for <10μs."""
+    set_current_language("javascript")
+    try:
+        assert compute_noise_floor(100_000, disable_gh_action_noise=True) == pytest.approx(0.15)
+        assert compute_noise_floor(9_999, disable_gh_action_noise=True) == pytest.approx(0.45)
+    finally:
+        reset_current_language()
+
+
+def test_compute_noise_floor_typescript() -> None:
+    """TypeScript gets the same JS multiplier."""
+    set_current_language("typescript")
+    try:
+        assert compute_noise_floor(100_000, disable_gh_action_noise=True) == pytest.approx(0.15)
+    finally:
+        reset_current_language()
+
+
+def test_speedup_critic_rejects_js_false_positive() -> None:
+    """A 10.6% speedup that passes for Python should be rejected for JS (noise floor 15%)."""
+    original_code_runtime = 100_000  # 100μs — above the 10μs fast-function threshold
+
+    candidate_result = OptimizedCandidateResult(
+        max_loop_count=5,
+        best_test_runtime=90_500,  # ~10.5% improvement
+        behavior_test_results=TestResults(),
+        benchmarking_test_results=TestResults(),
+        optimization_candidate_index=0,
+        total_candidate_timing=12,
+    )
+
+    # Python: 10.5% > 5% noise floor → accepted
+    reset_current_language()
+    assert speedup_critic(candidate_result, original_code_runtime, None, disable_gh_action_noise=True)
+
+    # JavaScript: 10.5% < 15% noise floor → rejected
+    set_current_language("javascript")
+    try:
+        assert not speedup_critic(candidate_result, original_code_runtime, None, disable_gh_action_noise=True)
+    finally:
+        reset_current_language()
