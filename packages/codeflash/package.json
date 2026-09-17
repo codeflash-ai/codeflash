@@ -109,7 +109,7 @@
   "optionalDependencies": {
     "@babel/core": "^7.24.0",
     "@babel/register": "^7.24.0",
-    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-env": "^8.0.5",
     "@babel/preset-typescript": "^7.24.0"
   }
 }
